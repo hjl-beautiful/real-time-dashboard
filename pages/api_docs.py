@@ -83,7 +83,7 @@ api_endpoints = [
 ]"""
     },
     {
-        "name": "实时订单流",
+        "name": "准实时订单流",
         "method": "GET",
         "path": "/api/orders_stream",
         "params": [("limit", "int", "1-100", "返回条数，默认 20")],

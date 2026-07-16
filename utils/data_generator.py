@@ -269,7 +269,7 @@ def generate_alert_data(date_str=None):
 
 
 def generate_order_stream(n=8):
-    """获取实时订单流"""
+    """获取准实时订单流"""
     if not df_orders.empty:
         recent = df_orders.head(n)
         return pd.DataFrame({

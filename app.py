@@ -31,8 +31,8 @@ query_date, compare_date = resolve_query_date(selected_period)
 # ========== KPI 卡片（可点击下钻）==========
 kpi_data = generate_kpi_data(query_date, compare_date)
 kpi_items = [
-    ("实时销售额", kpi_data["sales"]["value"], kpi_data["sales"]["unit"], kpi_data["sales"]["change"], kpi_data["sales"]["trend"], "#3b82f6", "sales"),
-    ("实时订单量", kpi_data["orders"]["value"], kpi_data["orders"]["unit"], kpi_data["orders"]["change"], kpi_data["orders"]["trend"], "#8b5cf6", "orders"),
+    ("准实时销售额", kpi_data["sales"]["value"], kpi_data["sales"]["unit"], kpi_data["sales"]["change"], kpi_data["sales"]["trend"], "#3b82f6", "sales"),
+    ("准实时订单量", kpi_data["orders"]["value"], kpi_data["orders"]["unit"], kpi_data["orders"]["change"], kpi_data["orders"]["trend"], "#8b5cf6", "orders"),
     ("在线用户数", kpi_data["users"]["value"], kpi_data["users"]["unit"], kpi_data["users"]["change"], kpi_data["users"]["trend"], "#ec4899", "users"),
     ("整体转化率", kpi_data["conversion"]["value"], kpi_data["conversion"]["unit"], kpi_data["conversion"]["change"], kpi_data["conversion"]["trend"], "#10b981", "conversion"),
     ("客单价", kpi_data["avg_order"]["value"], kpi_data["avg_order"]["unit"], kpi_data["avg_order"]["change"], kpi_data["avg_order"]["trend"], "#f59e0b", "avg_order"),
@@ -212,9 +212,9 @@ with st.container(border=True):
         )
         st.plotly_chart(fig_top, use_container_width=True, key="top_chart_main")
 
-# ========== 实时监控与告警 ==========
+# ========== 监控中心与告警 ==========
 with st.container(border=True):
-    st.markdown('<div class="panel-header">实时监控与告警</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header">监控中心与告警</div>', unsafe_allow_html=True)
 
     col_left, col_right = st.columns([1, 1])
 
@@ -271,7 +271,7 @@ with st.container(border=True):
             st.html(alert_item_html)
 
     with col_right:
-        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:10px;'>实时订单流水</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:10px;'>准实时订单流水</p>", unsafe_allow_html=True)
         order_df = generate_order_stream(8)
 
         table_html = """

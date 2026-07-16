@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 def render_navbar(current_page: str = "监控总览"):
     """
-    渲染统一的顶部标题栏（固定页面标题 + 实时指示器 + 时间戳）
+    渲染统一的顶部标题栏（固定页面标题 + 准实时指示器 + 时间戳）
     current_page: 当前页面名称（用于高亮）
     """
     st.set_page_config(
@@ -166,7 +166,7 @@ def render_navbar(current_page: str = "监控总览"):
             border-color: rgba(59, 130, 246, 0.3);
         }
 
-        /* 实时数据指示器 */
+        /* 准实时数据指示器 */
         .live-indicator {
             display: inline-flex;
             align-items: center;
@@ -294,7 +294,7 @@ def render_navbar(current_page: str = "监控总览"):
     # 顶栏导航链接（与侧边栏保持一致）
     nav_items = [
         ("监控总览", "app"),
-        ("实时监控", "monitor"),
+        ("监控中心", "monitor"),
         ("告警管理", "alert"),
         ("API文档", "api_docs"),
     ]
@@ -307,12 +307,12 @@ def render_navbar(current_page: str = "监控总览"):
     <div class="top-header">
         <div>
             <div class="top-header-title">企业数据智能监控大屏</div>
-            <div class="top-header-subtitle">全链路业务数据实时监控 | 智能预警 | 多维度分析</div>
+            <div class="top-header-subtitle">全链路业务数据准实时监控 | 智能预警 | 多维度分析</div>
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
             <div class="live-indicator">
                 <div class="live-dot"></div>
-                <span>实时数据</span>
+                <span>准实时数据</span>
             </div>
             <div class="top-header-nav">
                 {nav_html}
@@ -346,7 +346,7 @@ def resolve_query_date(selected_period):
 
 
 def render_sidebar():
-    """渲染统一的侧边栏控制面板（页面导航 + 时间筛选 + 实时刷新）"""
+    """渲染统一的侧边栏控制面板（页面导航 + 时间筛选 + 自动刷新）"""
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:20px;">
@@ -365,7 +365,7 @@ def render_sidebar():
             if st.button("监控总览", use_container_width=True, key="nav_home"):
                 st.switch_page("app.py")
         with cols[1]:
-            if st.button("实时监控", use_container_width=True, key="nav_monitor"):
+            if st.button("监控中心", use_container_width=True, key="nav_monitor"):
                 st.switch_page("pages/monitor.py")
 
         cols2 = st.columns(2)
@@ -391,8 +391,8 @@ def render_sidebar():
 
         st.markdown("---")
 
-        # 实时刷新控制
-        st.markdown("<div style='font-size:12px; color:#e2e8f0; margin-bottom:8px; font-weight:600;'>实时刷新</div>", unsafe_allow_html=True)
+        # 自动刷新控制
+        st.markdown("<div style='font-size:12px; color:#e2e8f0; margin-bottom:8px; font-weight:600;'>自动刷新</div>", unsafe_allow_html=True)
 
         auto_refresh = st.toggle("自动刷新数据", value=False, key="auto_refresh")
         refresh_interval = st.select_slider("刷新间隔", options=["2s", "5s", "10s", "30s"], value="5s", key="refresh_interval")
@@ -415,10 +415,10 @@ def render_sidebar():
 
 
 def render_live_badge():
-    """渲染实时数据角标"""
+    """渲染准实时数据角标"""
     st.markdown("""
     <div class="live-indicator" style="margin-bottom:12px;">
         <div class="live-dot"></div>
-        <span>实时数据流</span>
+        <span>准实时数据流</span>
     </div>
     """, unsafe_allow_html=True)

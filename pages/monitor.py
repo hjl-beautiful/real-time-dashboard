@@ -1,5 +1,5 @@
 """
-企业数据智能监控大屏 - 实时监控页
+企业数据智能监控大屏 - 监控中心页
 深色科技风 · 多维度数据监控
 """
 import streamlit as st
@@ -15,7 +15,7 @@ from utils.data_generator import (
 from utils.navbar import render_navbar, render_sidebar, resolve_query_date
 
 # ========== 统一导航栏 ==========
-render_navbar("实时监控")
+render_navbar("监控中心")
 auto_refresh, refresh_interval, selected_period = render_sidebar()
 
 query_date, _ = resolve_query_date(selected_period)
@@ -37,7 +37,7 @@ kpi_items = [
 ]
 
 with st.container(border=True):
-    st.markdown('<div class="panel-header">实时经营概览</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header">准实时经营概览</div>', unsafe_allow_html=True)
     kpi_cols = st.columns(6)
     for col, (name, val, unit, change, trend) in zip(kpi_cols, kpi_items):
         with col:
@@ -170,7 +170,7 @@ with st.container(border=True):
         st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
     with c3:
-        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">实时订单流水</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">准实时订单流水</div>', unsafe_allow_html=True)
 
         order_df = generate_order_stream(12)
 
