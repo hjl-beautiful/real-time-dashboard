@@ -62,18 +62,35 @@ def init_db():
         "order_stream": ("orders_stream.csv", ["order_id", "order_time", "amount_yuan", "channel", "status", "user_city"]),
     }
 
+    # 表名与列名白名单，防止 SQL 注入（表名/列名无法使用参数化绑定）
+    allowed_tables = set(csv_mappings.keys())
+    allowed_columns = {t: set(cols) for t, (_, cols) in csv_mappings.items()}
+
+    def validate_identifier(name):
+        """确保 SQL 标识符仅由字母、数字、下划线组成"""
+        if not isinstance(name, str) or not name.replace("_", "").isalnum():
+            raise ValueError(f"Invalid SQL identifier: {name}")
+        return name
+
     for table, (filename, cols) in csv_mappings.items():
+        if table not in allowed_tables or not set(cols).issubset(allowed_columns[table]):
+            continue
+        validate_identifier(table)
+        for col in cols:
+            validate_identifier(col)
+
         c.execute(f"SELECT COUNT(*) FROM {table}")
         if c.fetchone()[0] == 0:
             csv_path = os.path.join(DATA_DIR, filename)
             if os.path.exists(csv_path):
                 with open(csv_path, "r", encoding="utf-8-sig") as f:
                     reader = csv.DictReader(f)
+                    col_list = ",".join(cols)
                     placeholders = ",".join(["?"] * len(cols))
                     for row in reader:
                         values = [row.get(c, None) for c in cols]
                         try:
-                            c.execute(f"INSERT OR IGNORE INTO {table} ({','.join(cols)}) VALUES ({placeholders})", values)
+                            c.execute(f"INSERT OR IGNORE INTO {table} ({col_list}) VALUES ({placeholders})", values)
                         except Exception:
                             pass
                 conn.commit()
