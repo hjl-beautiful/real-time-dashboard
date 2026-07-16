@@ -6,7 +6,7 @@ from utils.data_generator import (
     generate_top_products, generate_alert_data, generate_order_stream,
     get_available_dates, get_kpi_detail
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="企业数据监控大屏", layout="wide", initial_sidebar_state="collapsed")
 
