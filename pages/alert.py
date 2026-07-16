@@ -2,82 +2,30 @@
 企业数据监控大屏 - 告警管理页
 """
 import streamlit as st
+import time
 import plotly.graph_objects as go
 import pandas as pd
+import numpy as np
+import random
 from datetime import datetime, timedelta
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.data_generator import generate_alert_data
+from utils.navbar import render_dashboard_header, render_refresh_controls
 
-st.set_page_config(page_title="告警管理", layout="wide")
-
-st.markdown("""
-<style>
-    .stApp { background: linear-gradient(135deg, #0b1120 0%, #0f172a 50%, #1e1b4b 100%); }
-    .main .block-container { padding: 0.5rem 1rem; }
-    footer { display: none !important; }
-    header { display: none !important; }
-    [data-testid="stSidebar"] { display: none; }
-    
-    .stat-card {
-        background: linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%);
-        border: 1px solid rgba(59,130,246,0.1); border-radius: 12px; padding: 16px;
-        text-align: center;
-    }
-    .stat-value { font-size: 32px; font-weight: 800; font-family: 'Inter', sans-serif; }
-    .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
-    
-    .panel-header {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 14px; font-weight: 700; color: #e2e8f0; margin-bottom: 14px;
-    }
-    .panel-header::before {
-        content: ''; width: 4px; height: 18px; background: #ef4444; border-radius: 2px;
-    }
-    
-    hr { border: 0; height: 1px; background: rgba(51,65,85,0.5); margin: 16px 0; }
-    
-    .alert-item {
-        background: #0f172a; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px;
-        border-left: 4px solid #ef4444; transition: all 0.2s;
-    }
-    .alert-item:hover { background: #1a2436; }
-    .alert-item.critical { border-left-color: #ef4444; }
-    .alert-item.warning { border-left-color: #f59e0b; }
-    .alert-item.info { border-left-color: #3b82f6; }
-    
-    .badge {
-        display: inline-block; padding: 3px 10px; border-radius: 12px;
-        font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-    }
-</style>
-""", unsafe_allow_html=True)
+# ========== 统一导航栏 ==========
+render_dashboard_header("告警管理")
+selected_period, auto_refresh = render_refresh_controls()
 
 now = datetime.now()
 query_date = now.strftime("%Y-%m-%d")
 
-alert_df = generate_alert_data(query_date)
+# 动态数据
+if auto_refresh:
+    seed = int(time.time() / 10)
+    random.seed(seed)
 
-# ========== 顶部 ==========
-st.html(f"""
-<div style="display:flex; justify-content:space-between; align-items:center; 
-            background:rgba(15,23,42,0.9); border:1px solid #334155; border-radius:12px; 
-            padding:14px 24px; margin-bottom:16px;">
-    <div style="display:flex; align-items:center; gap:12px;">
-        <div style="font-size:28px;"></div>
-        <div>
-            <div style="font-size:20px; font-weight:800; color:#e2e8f0;">告警管理中心</div>
-            <div style="font-size:11px; color:#64748b;">ALERT MANAGEMENT · 实时监控异常事件</div>
-        </div>
-    </div>
-    <div style="display:flex; align-items:center; gap:6px;">
-        <div style="width:10px; height:10px; background:#ef4444; border-radius:50%; 
-                    box-shadow:0 0 8px #ef4444; animation:pulse2 1.5s infinite;"></div>
-        <span style="color:#f87171; font-size:12px; font-weight:600;">监控中</span>
-    </div>
-</div>
-<style>@keyframes pulse2 {{ 0%,100% {{box-shadow:0 0 8px #ef4444}} 50% {{box-shadow:0 0 16px #ef4444}} }}</style>
-""")
+alert_df = generate_alert_data(query_date)
 
 # ========== 告警概览 ==========
 high_count = len(alert_df[alert_df["level"] == "高危"])
@@ -227,6 +175,11 @@ with col_detail:
 # 底部
 st.html(f"""
 <div style="text-align:center; padding:12px; color:#475569; font-size:11px; border-top:1px solid #1e293b; margin-top:16px;">
-     告警管理中心 · 监控 {len(alert_df)} 条告警 · {unresolved} 条待处理 · {now.strftime("%Y-%m-%d %H:%M:%S")}
+    告警管理中心 · 监控 {len(alert_df)} 条告警 · {unresolved} 条待处理 · {now.strftime("%Y-%m-%d %H:%M:%S")}
 </div>
 """)
+
+# 自动刷新
+if auto_refresh:
+    time.sleep(5)
+    st.rerun()

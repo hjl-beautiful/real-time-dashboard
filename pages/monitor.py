@@ -3,10 +3,12 @@
 深色科技风 · 多维度数据监控
 """
 import streamlit as st
+import time
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
+import random
 from datetime import datetime, timedelta
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,70 +16,19 @@ from utils.data_generator import (
     generate_trend_data, generate_channel_data, generate_top_products,
     generate_kpi_data, generate_order_stream
 )
+from utils.navbar import render_dashboard_header, render_refresh_controls
 
-st.set_page_config(page_title="实时监控", layout="wide")
-
-st.markdown("""
-<style>
-    .stApp { background: linear-gradient(135deg, #0b1120 0%, #0f172a 50%, #1e1b4b 100%); }
-    .main .block-container { padding: 0.5rem 1rem; }
-    footer { display: none !important; }
-    header { display: none !important; }
-    [data-testid="stSidebar"] { display: none; }
-    
-    .stat-card {
-        background: linear-gradient(145deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%);
-        border: 1px solid rgba(59,130,246,0.1); border-radius: 12px; padding: 16px;
-        text-align: center; position: relative; overflow: hidden;
-    }
-    .stat-card::before {
-        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-        background: linear-gradient(90deg, #3b82f6, #06b6d4); border-radius: 12px 12px 0 0;
-    }
-    .stat-value { font-size: 28px; font-weight: 800; color: #f1f5f9; font-family: 'Inter', sans-serif; }
-    .stat-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
-    .stat-change { font-size: 12px; font-weight: 600; margin-top: 4px; }
-    .stat-change.up { color: #10b981; }
-    .stat-change.down { color: #ef4444; }
-    
-    .panel-header {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 14px; font-weight: 700; color: #e2e8f0; margin-bottom: 14px;
-    }
-    .panel-header::before {
-        content: ''; width: 4px; height: 18px; background: #3b82f6; border-radius: 2px;
-    }
-    
-    hr { border: 0; height: 1px; background: rgba(51,65,85,0.5); margin: 16px 0; }
-</style>
-""", unsafe_allow_html=True)
+# ========== 统一导航栏 ==========
+render_dashboard_header("实时监控")
+selected_period, auto_refresh = render_refresh_controls()
 
 now = datetime.now()
 query_date = now.strftime("%Y-%m-%d")
 
-# ========== 顶部通栏 ==========
-st.html(f"""
-<div style="display:flex; justify-content:space-between; align-items:center; 
-            background:rgba(15,23,42,0.9); border:1px solid #334155; border-radius:12px; 
-            padding:14px 24px; margin-bottom:16px;">
-    <div style="display:flex; align-items:center; gap:12px;">
-        <div style="font-size:28px;"></div>
-        <div>
-            <div style="font-size:20px; font-weight:800; color:#e2e8f0;">实时数据监控</div>
-            <div style="font-size:11px; color:#64748b;">REAL-TIME DATA MONITORING · {query_date}</div>
-        </div>
-    </div>
-    <div style="display:flex; align-items:center; gap:8px;">
-        <div style="display:flex; align-items:center; gap:6px; background:#064e3b; border:1px solid #10b981; 
-                    border-radius:20px; padding:4px 14px;">
-            <div style="width:8px; height:8px; background:#10b981; border-radius:50%; animation:pulse 2s infinite;"></div>
-            <span style="color:#10b981; font-size:11px; font-weight:600;">数据实时同步中</span>
-        </div>
-        <span style="color:#64748b; font-size:12px;">{now.strftime("%H:%M:%S")}</span>
-    </div>
-</div>
-<style>@keyframes pulse {{ 0%,100% {{opacity:1}} 50% {{opacity:0.4}} }}</style>
-""")
+# 动态数据
+if auto_refresh:
+    seed = int(time.time() / 10)
+    random.seed(seed)
 
 # ========== KPI 概览 ==========
 kpi = generate_kpi_data(query_date)
@@ -259,6 +210,11 @@ with c3:
 # 底部
 st.html(f"""
 <div style="text-align:center; padding:12px; color:#475569; font-size:11px; border-top:1px solid #1e293b; margin-top:16px;">
-     企业数据监控大屏 · 数据日期: {query_date} · 刷新时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
+    企业数据监控大屏 · 数据日期: {query_date} · 刷新时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
 </div>
 """)
+
+# 自动刷新
+if auto_refresh:
+    time.sleep(5)
+    st.rerun()

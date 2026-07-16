@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 import plotly.graph_objects as go
 import plotly.express as px
 from utils.data_generator import (
@@ -6,26 +7,12 @@ from utils.data_generator import (
     generate_top_products, generate_alert_data, generate_order_stream,
     get_available_dates, get_kpi_detail
 )
+from utils.navbar import render_dashboard_header, render_refresh_controls
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="企业数据监控大屏", layout="wide", initial_sidebar_state="collapsed")
-
-# 全局CSS
-st.markdown("""
-<style>
-.stApp { background: linear-gradient(135deg, #0b1120 0%, #0f172a 50%, #1e1b4b 100%); }
-header { visibility: hidden; }
-.stDeployButton { display: none; }
-footer { visibility: hidden; }
-.block-container { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; max-width: 100% !important; }
-[data-testid="stSidebar"] { display: none; }
-.stButton > button { background: #1e293b !important; color: #94a3b8 !important; border: 1px solid #334155 !important; border-radius: 6px !important; font-size: 12px !important; cursor: pointer !important; }
-.stButton > button:hover { background: #334155 !important; color: #e2e8f0 !important; border-color: #3b82f6 !important; }
-.stSelectbox > div > div { background: #1e293b !important; border: 1px solid #334155 !important; border-radius: 6px !important; }
-.stSelectbox label { color: #94a3b8 !important; font-size: 12px !important; }
-div[data-testid="stHorizontalBlock"] { gap: 8px !important; }
-</style>
-""", unsafe_allow_html=True)
+# ========== 统一导航栏 ==========
+render_dashboard_header("监控总览")
+selected_period, auto_refresh = render_refresh_controls()
 
 # 初始化session_state
 if "selected_kpi" not in st.session_state:
@@ -35,20 +22,6 @@ if "date_filter" not in st.session_state:
 
 now = datetime.now()
 current_time = now.strftime("%Y-%m-%d %H:%M:%S")
-
-# ========== 时间筛选器配置 ==========
-time_options = ["今日", "昨日", "本周", "本月", "自定义日期"]
-
-# ========== 顶部通栏（含真实时间筛选器）==========
-# 用 columns 实现可交互的筛选器
-filter_col1, filter_col2, filter_col3 = st.columns([1, 4, 1])
-
-with filter_col1:
-    selected_period = st.selectbox("时间范围", time_options, key="time_filter", label_visibility="collapsed")
-
-with filter_col3:
-    if st.button(" 刷新数据", key="refresh_btn"):
-        st.rerun()
 
 # 确定查询日期
 if selected_period == "今日":
@@ -70,33 +43,6 @@ if selected_period == "自定义日期":
     compare_date = (datetime.strptime(query_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
 else:
     compare_date = (datetime.strptime(query_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-
-from datetime import timedelta
-
-# ========== 顶部通栏 ==========
-header_html = f"""
-<div style="display:flex; justify-content:space-between; align-items:center; background:rgba(15,23,42,0.9); border:1px solid #334155; border-radius:12px; padding:14px 24px; margin-bottom:16px;">
-    <div style="display:flex; align-items:center; gap:12px;">
-        <div>
-            <div style="font-size:22px; font-weight:800; color:#e2e8f0; letter-spacing:1px;">企业数据监控大屏</div>
-            <div style="font-size:11px; color:#64748b; letter-spacing:2px; margin-top:2px;">ENTERPRISE DATA MONITORING DASHBOARD</div>
-        </div>
-        <div style="width:2px; height:32px; background:#3b82f6; border-radius:1px;"></div>
-    </div>
-    <div style="text-align:center;">
-        <div style="font-size:14px; color:#64748b;">数据日期: <span style="color:#e2e8f0; font-weight:600;">{query_date}</span></div>
-        <div style="font-size:24px; font-weight:700; color:#e2e8f0; font-family:monospace;">{current_time}</div>
-    </div>
-    <div style="display:flex; align-items:center; gap:8px;">
-        <div style="display:flex; align-items:center; gap:6px; background:#064e3b; border:1px solid #10b981; border-radius:20px; padding:4px 14px;">
-            <div style="width:8px; height:8px; background:#10b981; border-radius:50%; animation:pulse 2s infinite;"></div>
-            <span style="color:#10b981; font-size:11px; font-weight:600;">系统运行中</span>
-        </div>
-    </div>
-</div>
-<style>@keyframes pulse {{ 0%, 100% {{ opacity:1; }} 50% {{ opacity:0.4; }} }}</style>
-"""
-st.html(header_html)
 
 # ========== KPI 卡片（可点击下钻）==========
 kpi_data = generate_kpi_data(query_date, compare_date)
@@ -392,6 +338,11 @@ with col_right:
 st.markdown("<br>", unsafe_allow_html=True)
 st.html(f"""
 <div style="text-align:center; padding:12px; color:#475569; font-size:11px; border-top:1px solid #1e293b; margin-top:16px;">
-     数据来源: 模拟电商业务数据 (90天) | 系统时间: {current_time} | 数据日期: {query_date}
+    数据来源: 模拟电商业务数据 (90天) | 系统时间: {current_time} | 数据日期: {query_date}
 </div>
 """)
+
+# 自动刷新
+if auto_refresh:
+    time.sleep(5)
+    st.rerun()
