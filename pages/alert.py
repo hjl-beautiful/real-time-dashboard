@@ -13,7 +13,6 @@ st.markdown("<h2 style='color:#e2e8f0; margin-bottom:20px;'>告警记录</h2>", 
 
 alert_df = generate_alert_data()
 
-# 告警统计卡片
 col1, col2, col3 = st.columns(3)
 with col1:
     st.markdown("""
@@ -42,7 +41,6 @@ with col3:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 告警列表
 st.markdown("<div style='background:#1e293b; border-radius:12px; padding:16px; border:1px solid #334155;'>" 
             "<h4 style='color:#94a3b8; margin:0 0 12px 0;'>告警列表</h4>", unsafe_allow_html=True)
 

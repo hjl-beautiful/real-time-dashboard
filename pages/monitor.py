@@ -5,7 +5,6 @@ from utils.data_generator import generate_trend_data, generate_channel_data, gen
 
 st.set_page_config(page_title="实时监控", page_icon="", layout="wide")
 
-# 自定义样式
 st.markdown("""
 <style>
     .block-container { padding-top: 1rem; padding-bottom: 1rem; }
@@ -15,38 +14,28 @@ st.markdown("""
 
 st.markdown("<h2 style='color:#e2e8f0; margin-bottom:20px;'>实时监控</h2>", unsafe_allow_html=True)
 
-# 区域销售分布地图
 col1, col2 = st.columns([3, 2])
 
 with col1:
     st.markdown("<div style='background:#1e293b; border-radius:12px; padding:16px; border:1px solid #334155;'>" 
                 "<h4 style='color:#94a3b8; margin:0 0 12px 0;'>全国用户分布热力图</h4>", unsafe_allow_html=True)
     map_df = generate_map_data()
-    fig_map = px.choropleth(
-        map_df,
-        locations="省份",
-        locationmode="geojson-names",
-        featureidkey="properties.name",
-        geojson="china",
+    fig_map = px.bar(
+        map_df.head(10).sort_values("活跃用户", ascending=True),
+        x="活跃用户",
+        y="省份",
+        orientation="h",
         color="活跃用户",
         color_continuous_scale="Blues",
-        range_color=(0, 3000),
-    )
-    fig_map.update_geos(
-        visible=False,
-        fitbounds="locations",
-        projection_scale=1.1,
     )
     fig_map.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=0, r=0, t=0, b=0),
+        margin=dict(l=60, r=20, t=10, b=10),
         height=380,
-        coloraxis_colorbar=dict(
-            title="活跃用户",
-            tickfont=dict(color="#94a3b8"),
-            titlefont=dict(color="#94a3b8"),
-        ),
+        xaxis=dict(showgrid=False, tickfont=dict(color="#94a3b8")),
+        yaxis=dict(showgrid=False, tickfont=dict(color="#e2e8f0")),
+        coloraxis_showscale=False,
     )
     st.plotly_chart(fig_map, use_container_width=True, key="map_chart")
     st.markdown("</div>", unsafe_allow_html=True)
@@ -75,7 +64,6 @@ with col2:
     st.plotly_chart(fig_channel, use_container_width=True, key="channel_chart")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# 产品类别占比
 st.markdown("<div style='background:#1e293b; border-radius:12px; padding:16px; border:1px solid #334155; margin-top:16px;'>" 
             "<h4 style='color:#94a3b8; margin:0 0 12px 0;'>产品类别销售占比</h4>", unsafe_allow_html=True)
 

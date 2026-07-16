@@ -6,53 +6,23 @@ from utils.data_generator import (
     generate_top_products, generate_alert_data, generate_order_stream
 )
 from datetime import datetime
-import time
 
 st.set_page_config(page_title="企业数据监控大屏", page_icon="", layout="wide", initial_sidebar_state="collapsed")
 
-# ==================== 全局样式 ====================
 st.markdown("""
 <style>
-    /* 全局背景 */
     .stApp {
         background: linear-gradient(135deg, #0b1120 0%, #0f172a 50%, #1e1b4b 100%);
     }
-    /* 隐藏顶部导航和页脚 */
     header { visibility: hidden; }
     .stDeployButton { display: none; }
     footer { visibility: hidden; }
-    /* 容器优化 */
     .block-container {
         padding-top: 0.5rem !important;
         padding-bottom: 0.5rem !important;
         max-width: 100% !important;
     }
-    /* 侧边栏隐藏 */
     [data-testid="stSidebar"] { display: none; }
-    /* 表格样式 */
-    .dataframe {
-        background: transparent !important;
-        border: none !important;
-    }
-    .dataframe th {
-        background: #1e293b !important;
-        color: #94a3b8 !important;
-        border-bottom: 1px solid #334155 !important;
-        font-weight: 600 !important;
-        font-size: 12px !important;
-        padding: 10px 12px !important;
-    }
-    .dataframe td {
-        background: transparent !important;
-        color: #cbd5e1 !important;
-        border-bottom: 1px solid #1e293b !important;
-        font-size: 13px !important;
-        padding: 10px 12px !important;
-    }
-    .dataframe tr:hover td {
-        background: #1e293b !important;
-    }
-    /* 按钮样式 */
     .stButton > button {
         background: #1e293b !important;
         color: #94a3b8 !important;
@@ -65,24 +35,9 @@ st.markdown("""
         background: #334155 !important;
         color: #e2e8f0 !important;
     }
-    /* selectbox */
-    .stSelectbox > div > div {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
-        border-radius: 6px !important;
-    }
-    .stSelectbox > div > div > div {
-        color: #e2e8f0 !important;
-    }
-    /* 分割线 */
-    hr {
-        border-color: #334155 !important;
-        margin: 8px 0 !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== 顶部通栏 ====================
 now = datetime.now()
 current_time = now.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -111,19 +66,18 @@ st.markdown(f"""
     </div>
     <div style="display: flex; align-items: center; gap: 10px;">
         <div style="background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 4px 12px;">
-            <span style="color: #64748b; font-size: 11px;">时间范围</span>
+            <span style="color: #64748b; font-size: 11px;">今日</span>
         </div>
         <div style="background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 4px 12px;">
             <span style="color: #64748b; font-size: 11px;">全渠道</span>
         </div>
-        <div style="background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 6px 14px; cursor: pointer;">
+        <div style="background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 6px 14px;">
             <span style="color: #3b82f6; font-size: 12px; font-weight: 600;">刷新</span>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ==================== 第一区块：核心KPI指标卡片 ====================
 kpi_data = generate_kpi_data()
 
 kpi_items = [
@@ -173,7 +127,6 @@ for title, value, unit, change, trend, color in kpi_items:
 kpi_html += '</div>'
 st.markdown(kpi_html, unsafe_allow_html=True)
 
-# ==================== 第二区块：核心指标分时趋势 ====================
 st.markdown("""
 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
     <div style="width: 4px; height: 18px; background: #3b82f6; border-radius: 2px;"></div>
@@ -232,7 +185,6 @@ for i, (col, title, col_name, color, fill_color) in enumerate(chart_configs):
         st.plotly_chart(fig, use_container_width=True, key=f"trend_{i}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ==================== 第三区块：维度拆解分析 ====================
 st.markdown("""
 <div style="display: flex; align-items: center; gap: 10px; margin: 16px 0 12px 0;">
     <div style="width: 4px; height: 18px; background: #8b5cf6; border-radius: 2px;"></div>
@@ -249,7 +201,6 @@ with col1:
         <div style="font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 10px;">全国用户分布热力图</div>
     """, unsafe_allow_html=True)
 
-    # 使用横向柱状图模拟地图效果（Streamlit Cloud兼容性更好）
     map_provinces = ["广东", "浙江", "江苏", "北京", "上海", "四川", "山东", "福建", "湖北", "河南"]
     map_values = [2850, 1920, 1780, 1540, 1460, 1120, 1080, 950, 870, 820]
     map_colors = ["#1e3a5f", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", 
@@ -352,7 +303,6 @@ with col3:
     st.plotly_chart(fig_top, use_container_width=True, key="top_chart_main")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ==================== 底部通栏：实时监控告警 + 实时流水 ====================
 st.markdown("""
 <div style="display: flex; align-items: center; gap: 10px; margin: 16px 0 12px 0;">
     <div style="width: 4px; height: 18px; background: #ef4444; border-radius: 2px;"></div>
@@ -369,7 +319,6 @@ with col_left:
         <div style="font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 12px;">告警监控</div>
     """, unsafe_allow_html=True)
 
-    # 告警统计小卡片
     alert_stats = [
         ("高危告警", "1", "#ef4444", "#7f1d1d"),
         ("中危告警", "2", "#f59e0b", "#713f12"),
@@ -387,7 +336,6 @@ with col_left:
     stats_html += '</div>'
     st.markdown(stats_html, unsafe_allow_html=True)
 
-    # 告警列表
     alert_df = generate_alert_data()
     for _, row in alert_df.head(4).iterrows():
         level_color = {"高危": "#ef4444", "中危": "#f59e0b", "低危": "#3b82f6"}[row["level"]]
@@ -422,7 +370,6 @@ with col_right:
 
     order_df = generate_order_stream()
 
-    # 自定义表格渲染
     table_html = """
     <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
         <thead>
@@ -461,7 +408,6 @@ with col_right:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ==================== 数据导出 ====================
 st.markdown("<br>", unsafe_allow_html=True)
 export_col1, export_col2, export_col3 = st.columns([1, 1, 4])
 with export_col1:
@@ -470,7 +416,3 @@ with export_col1:
 with export_col2:
     if st.button("全屏展示", key="fullscreen_btn"):
         st.toast("按 F11 进入全屏模式", icon="")
-
-# 自动刷新
-# time.sleep(5)
-# st.rerun()

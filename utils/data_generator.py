@@ -23,7 +23,6 @@ def generate_trend_data(hours=24):
     base_orders = np.random.normal(220, 60, hours)
     base_users = np.random.normal(180, 40, hours)
 
-    # 模拟白天高峰
     for i in range(hours):
         h = (now.hour - hours + i) % 24
         if 9 <= h <= 12 or 14 <= h <= 18 or 20 <= h <= 22:
