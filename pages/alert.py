@@ -9,7 +9,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.data_generator import generate_alert_data
 
-st.set_page_config(page_title="告警管理", page_icon="🚨", layout="wide")
+st.set_page_config(page_title="告警管理", layout="wide")
 
 st.markdown("""
 <style>
@@ -64,7 +64,7 @@ st.html(f"""
             background:rgba(15,23,42,0.9); border:1px solid #334155; border-radius:12px; 
             padding:14px 24px; margin-bottom:16px;">
     <div style="display:flex; align-items:center; gap:12px;">
-        <div style="font-size:28px;">🚨</div>
+        <div style="font-size:28px;"></div>
         <div>
             <div style="font-size:20px; font-weight:800; color:#e2e8f0;">告警管理中心</div>
             <div style="font-size:11px; color:#64748b;">ALERT MANAGEMENT · 实时监控异常事件</div>
@@ -91,7 +91,7 @@ with s1:
     st.markdown(f"""
     <div class="stat-card" style="border:1px solid #b91c1c;">
         <div class="stat-value" style="color:#fca5a5;">{high_count}</div>
-        <div class="stat-label" style="color:#f87171;">🔴 高危告警</div>
+        <div class="stat-label" style="color:#f87171;"> 高危告警</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -99,7 +99,7 @@ with s2:
     st.markdown(f"""
     <div class="stat-card" style="border:1px solid #ca8a04;">
         <div class="stat-value" style="color:#fde047;">{mid_count}</div>
-        <div class="stat-label" style="color:#facc15;">🟡 中危告警</div>
+        <div class="stat-label" style="color:#facc15;"> 中危告警</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -107,7 +107,7 @@ with s3:
     st.markdown(f"""
     <div class="stat-card" style="border:1px solid #3b82f6;">
         <div class="stat-value" style="color:#93c5fd;">{low_count}</div>
-        <div class="stat-label" style="color:#60a5fa;">🔵 低危告警</div>
+        <div class="stat-label" style="color:#60a5fa;"> 低危告警</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -115,12 +115,12 @@ with s4:
     st.markdown(f"""
     <div class="stat-card" style="border:1px solid #ef4444;">
         <div class="stat-value" style="color:#f87171;">{unresolved}</div>
-        <div class="stat-label" style="color:#f87171;">⚠️ 待处理</div>
+        <div class="stat-label" style="color:#f87171;"> 待处理</div>
     </div>
     """, unsafe_allow_html=True)
 
 # ========== 告警趋势模拟 ==========
-st.markdown('<div class="panel-header" style="margin-top:20px;">📊 近24小时告警趋势</div>', unsafe_allow_html=True)
+st.markdown('<div class="panel-header" style="margin-top:20px;"> 近24小时告警趋势</div>', unsafe_allow_html=True)
 
 hours = [(now - timedelta(hours=h)).strftime("%H:00") for h in range(23, -1, -1)]
 high_trend = [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1]
@@ -153,7 +153,7 @@ fig_trend.update_layout(
 st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
 
 # ========== 告警列表 ==========
-st.markdown('<div class="panel-header" style="margin-top:20px;">📋 告警详情列表</div>', unsafe_allow_html=True)
+st.markdown('<div class="panel-header" style="margin-top:20px;"> 告警详情列表</div>', unsafe_allow_html=True)
 
 col_alerts, col_detail = st.columns([3, 2])
 
@@ -186,7 +186,7 @@ with col_alerts:
 
 with col_detail:
     # 告警统计
-    st.markdown('<div class="panel-header" style="margin-top:0;">📊 告警分布</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header" style="margin-top:0;"> 告警分布</div>', unsafe_allow_html=True)
     
     fig_pie = go.Figure(data=[go.Pie(
         labels=["高危", "中危", "低危"], values=[high_count, mid_count, low_count],
@@ -205,12 +205,12 @@ with col_detail:
     st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
     
     # 处理建议
-    st.markdown('<div class="panel-header" style="margin-top:16px;">💡 处理建议</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header" style="margin-top:16px;"> 处理建议</div>', unsafe_allow_html=True)
     
     suggestions = [
-        ("🔴 高危告警", "立即通知值班负责人，启动应急预案。确认影响范围，同步相关业务方。", "critical"),
-        ("🟡 中危告警", "30分钟内响应，排查根因。如持续恶化则升级处理。", "warning"),
-        ("🔵 低危告警", "记录并纳入日常巡检，趋势监控即可。", "info"),
+        (" 高危告警", "立即通知值班负责人，启动应急预案。确认影响范围，同步相关业务方。", "critical"),
+        (" 中危告警", "30分钟内响应，排查根因。如持续恶化则升级处理。", "warning"),
+        (" 低危告警", "记录并纳入日常巡检，趋势监控即可。", "info"),
     ]
     
     for title, desc, cls in suggestions:
@@ -227,6 +227,6 @@ with col_detail:
 # 底部
 st.html(f"""
 <div style="text-align:center; padding:12px; color:#475569; font-size:11px; border-top:1px solid #1e293b; margin-top:16px;">
-    🚨 告警管理中心 · 监控 {len(alert_df)} 条告警 · {unresolved} 条待处理 · {now.strftime("%Y-%m-%d %H:%M:%S")}
+     告警管理中心 · 监控 {len(alert_df)} 条告警 · {unresolved} 条待处理 · {now.strftime("%Y-%m-%d %H:%M:%S")}
 </div>
 """)

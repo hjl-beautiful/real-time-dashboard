@@ -8,7 +8,7 @@ from utils.data_generator import (
 )
 from datetime import datetime
 
-st.set_page_config(page_title="企业数据监控大屏", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="企业数据监控大屏", layout="wide", initial_sidebar_state="collapsed")
 
 # 全局CSS
 st.markdown("""
@@ -47,7 +47,7 @@ with filter_col1:
     selected_period = st.selectbox("时间范围", time_options, key="time_filter", label_visibility="collapsed")
 
 with filter_col3:
-    if st.button("🔄 刷新数据", key="refresh_btn"):
+    if st.button(" 刷新数据", key="refresh_btn"):
         st.rerun()
 
 # 确定查询日期
@@ -136,7 +136,7 @@ for i, (title, value, unit, change, trend, color, key) in enumerate(kpi_items):
         st.html(kpi_html)
         
         # 点击下钻
-        if st.button(f"📊 查看详情", key=f"drill_{key}"):
+        if st.button(f" 查看详情", key=f"drill_{key}"):
             st.session_state.selected_kpi = key
 
 # ========== KPI 下钻面板 ==========
@@ -156,7 +156,7 @@ if st.session_state.selected_kpi:
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <div style="width:4px; height:18px; background:#3b82f6; border-radius:2px;"></div>
-                <span style="font-size:15px; font-weight:700; color:#e2e8f0;">📈 {drill_name} 分时明细</span>
+                <span style="font-size:15px; font-weight:700; color:#e2e8f0;"> {drill_name} 分时明细</span>
                 <span style="font-size:11px; color:#64748b;">({query_date})</span>
             </div>
         </div>
@@ -192,7 +192,7 @@ st.html("""
     <div style="width:4px; height:18px; background:#3b82f6; border-radius:2px;"></div>
     <span style="font-size:15px; font-weight:700; color:#e2e8f0;">核心指标分时趋势</span>
     <div style="flex:1; height:1px; background:#334155;"></div>
-    <span style="font-size:11px; color:#64748b;">📅 """ + query_date + """</span>
+    <span style="font-size:11px; color:#64748b;"> """ + query_date + """</span>
 </div>
 """)
 
@@ -392,6 +392,6 @@ with col_right:
 st.markdown("<br>", unsafe_allow_html=True)
 st.html(f"""
 <div style="text-align:center; padding:12px; color:#475569; font-size:11px; border-top:1px solid #1e293b; margin-top:16px;">
-    📊 数据来源: 模拟电商业务数据 (90天) | 系统时间: {current_time} | 数据日期: {query_date}
+     数据来源: 模拟电商业务数据 (90天) | 系统时间: {current_time} | 数据日期: {query_date}
 </div>
 """)

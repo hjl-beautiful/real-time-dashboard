@@ -15,7 +15,7 @@ from utils.data_generator import (
     generate_kpi_data, generate_order_stream
 )
 
-st.set_page_config(page_title="实时监控", page_icon="📡", layout="wide")
+st.set_page_config(page_title="实时监控", layout="wide")
 
 st.markdown("""
 <style>
@@ -61,7 +61,7 @@ st.html(f"""
             background:rgba(15,23,42,0.9); border:1px solid #334155; border-radius:12px; 
             padding:14px 24px; margin-bottom:16px;">
     <div style="display:flex; align-items:center; gap:12px;">
-        <div style="font-size:28px;">📡</div>
+        <div style="font-size:28px;"></div>
         <div>
             <div style="font-size:20px; font-weight:800; color:#e2e8f0;">实时数据监控</div>
             <div style="font-size:11px; color:#64748b;">REAL-TIME DATA MONITORING · {query_date}</div>
@@ -107,12 +107,12 @@ for col, (name, val, unit, change, trend) in zip(kpi_cols, kpi_items):
 col_left, col_right = st.columns([3, 1])
 
 with col_left:
-    st.markdown('<div class="panel-header">📈 分时运营趋势</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header"> 分时运营趋势</div>', unsafe_allow_html=True)
     
     trend_df = generate_trend_data(24, query_date)
     
     # 用标签切换指标
-    tab1, tab2, tab3 = st.tabs(["💰 销售额", "📦 订单量", "👥 在线用户"])
+    tab1, tab2, tab3 = st.tabs([" 销售额", " 订单量", " 在线用户"])
     
     chart_configs = [
         ("销售额", "#3b82f6", "rgba(59,130,246,0.15)", "万"),
@@ -140,7 +140,7 @@ with col_left:
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 with col_right:
-    st.markdown('<div class="panel-header">🍩 渠道占比</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header"> 渠道占比</div>', unsafe_allow_html=True)
     
     ch_df = generate_channel_data(query_date)
     fig_ch = go.Figure(data=[go.Pie(
@@ -173,7 +173,7 @@ st.markdown("<hr>", unsafe_allow_html=True)
 c1, c2, c3 = st.columns([2, 1, 1])
 
 with c1:
-    st.markdown('<div class="panel-header">🔥 热销商品 TOP10</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header"> 热销商品 TOP10</div>', unsafe_allow_html=True)
     
     top_df = generate_top_products(query_date)
     
@@ -198,7 +198,7 @@ with c1:
     st.plotly_chart(fig_top, use_container_width=True, config={"displayModeBar": False})
 
 with c2:
-    st.markdown('<div class="panel-header">🗺️ 用户地域分布</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header"> 用户地域分布</div>', unsafe_allow_html=True)
     
     provinces = ["广东", "浙江", "江苏", "北京", "上海", "四川", "山东", "福建", "湖北", "河南"]
     values = [2850, 1920, 1780, 1540, 1460, 1120, 1080, 950, 870, 820]
@@ -222,7 +222,7 @@ with c2:
     st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
 with c3:
-    st.markdown('<div class="panel-header">📋 实时订单流水</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header"> 实时订单流水</div>', unsafe_allow_html=True)
     
     order_df = generate_order_stream(12)
     
@@ -259,6 +259,6 @@ with c3:
 # 底部
 st.html(f"""
 <div style="text-align:center; padding:12px; color:#475569; font-size:11px; border-top:1px solid #1e293b; margin-top:16px;">
-    📊 企业数据监控大屏 · 数据日期: {query_date} · 刷新时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
+     企业数据监控大屏 · 数据日期: {query_date} · 刷新时间: {now.strftime('%Y-%m-%d %H:%M:%S')}
 </div>
 """)
