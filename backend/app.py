@@ -98,29 +98,16 @@ def api_kpi():
     today = datetime.now().strftime("%Y-%m-%d")
     
     if period == "today":
-        date_filter = f"date = '{today}'"
+        row = conn.execute("SELECT * FROM daily_kpi WHERE date = ?", (today,)).fetchone()
         compare_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        comp_row = conn.execute("SELECT * FROM daily_kpi WHERE date = ?", (compare_date,)).fetchone()
     elif period == "week":
         week_start = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-        date_filter = f"date >= '{week_start}'"
         compare_start = (datetime.now() - timedelta(days=14)).strftime("%Y-%m-%d")
         compare_end = week_start
-    elif period == "month":
-        month_start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        date_filter = f"date >= '{month_start}'"
-        compare_start = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
-        compare_end = month_start
-    else:
-        date_filter = f"date = '{today}'"
-        compare_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-    
-    # 当前周期汇总
-    if period == "today":
-        row = conn.execute(f"SELECT * FROM daily_kpi WHERE {date_filter}").fetchone()
-    else:
-        row = conn.execute(f"""
+        row = conn.execute("""
             SELECT 
-                '{period}' as date,
+                ? as date,
                 ROUND(AVG(sales_wan), 2) as sales_wan,
                 CAST(AVG(orders) AS INTEGER) as orders,
                 CAST(AVG(users) AS INTEGER) as users,
@@ -128,18 +115,9 @@ def api_kpi():
                 ROUND(AVG(avg_order_yuan), 1) as avg_order_yuan,
                 CAST(AVG(repeat_users) AS INTEGER) as repeat_users,
                 0 as is_weekend
-            FROM daily_kpi WHERE {date_filter}
-        """).fetchone()
-    
-    if not row:
-        conn.close()
-        return jsonify({"error": "no data"}), 404
-    
-    # 对比周期（计算变化率）
-    if period == "today":
-        comp_row = conn.execute(f"SELECT * FROM daily_kpi WHERE date = '{compare_date}'").fetchone()
-    else:
-        comp_row = conn.execute(f"""
+            FROM daily_kpi WHERE date >= ?
+        """, (period, week_start)).fetchone()
+        comp_row = conn.execute("""
             SELECT
                 ROUND(AVG(sales_wan), 2) as sales_wan,
                 CAST(AVG(orders) AS INTEGER) as orders,
@@ -147,8 +125,42 @@ def api_kpi():
                 ROUND(AVG(conversion_pct), 1) as conversion_pct,
                 ROUND(AVG(avg_order_yuan), 1) as avg_order_yuan,
                 CAST(AVG(repeat_users) AS INTEGER) as repeat_users
-            FROM daily_kpi WHERE date >= '{compare_start}' AND date < '{compare_end}'
-        """).fetchone() if period != "today" else None
+            FROM daily_kpi WHERE date >= ? AND date < ?
+        """, (compare_start, compare_end)).fetchone()
+    elif period == "month":
+        month_start = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        compare_start = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%d")
+        compare_end = month_start
+        row = conn.execute("""
+            SELECT 
+                ? as date,
+                ROUND(AVG(sales_wan), 2) as sales_wan,
+                CAST(AVG(orders) AS INTEGER) as orders,
+                CAST(AVG(users) AS INTEGER) as users,
+                ROUND(AVG(conversion_pct), 1) as conversion_pct,
+                ROUND(AVG(avg_order_yuan), 1) as avg_order_yuan,
+                CAST(AVG(repeat_users) AS INTEGER) as repeat_users,
+                0 as is_weekend
+            FROM daily_kpi WHERE date >= ?
+        """, (period, month_start)).fetchone()
+        comp_row = conn.execute("""
+            SELECT
+                ROUND(AVG(sales_wan), 2) as sales_wan,
+                CAST(AVG(orders) AS INTEGER) as orders,
+                CAST(AVG(users) AS INTEGER) as users,
+                ROUND(AVG(conversion_pct), 1) as conversion_pct,
+                ROUND(AVG(avg_order_yuan), 1) as avg_order_yuan,
+                CAST(AVG(repeat_users) AS INTEGER) as repeat_users
+            FROM daily_kpi WHERE date >= ? AND date < ?
+        """, (compare_start, compare_end)).fetchone()
+    else:
+        row = conn.execute("SELECT * FROM daily_kpi WHERE date = ?", (today,)).fetchone()
+        compare_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        comp_row = conn.execute("SELECT * FROM daily_kpi WHERE date = ?", (compare_date,)).fetchone()
+    
+    if not row:
+        conn.close()
+        return jsonify({"error": "no data"}), 404
     
     conn.close()
     
