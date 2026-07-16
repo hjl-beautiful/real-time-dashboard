@@ -152,4 +152,4 @@ docker run -p 8501:8501 enterprise-dashboard
 
 ## 面试话术
 
-> 独立开发面向业务方的准实时数据监控 BI 平台，覆盖销售/订单/用户/转化/商品 5 大模块。基于 Pandas + SQL 实现指标计算，Plotly 实现多维度可视化。配套 Flask RESTful API 和 SQLite 数据库，支持时间筛选、指标下钻、对比分析。全栈设计：数据层 → 服务层 → 展示层，日均处理 10w+ 业务数据，前端 Streamlit 与后端 API 解耦可独立部署。
+> 独立开发面向业务方的准实时数据监控 BI 平台，覆盖销售/订单/用户/转化/商品 5 大模块。基于 91 天自洽业务模拟数据，使用 Pandas + SQL 实现指标计算，Plotly 实现多维度可视化。配套 Flask RESTful API 和 SQLite 数据库，支持时间筛选、指标下钻、对比分析。全栈设计：数据层 → 服务层 → 展示层，前端 Streamlit 与后端 API 解耦可独立部署。

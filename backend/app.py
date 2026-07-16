@@ -1,6 +1,6 @@
 """
 企业数据监控大屏 - Flask 后端 API
-提供数据查询接口，从CSV/SQLite读取真实业务数据
+提供数据查询接口，从CSV/SQLite读取业务数据
 """
 from flask import Flask, jsonify, request
 from flask_cors import CORS
