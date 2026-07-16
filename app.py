@@ -1,12 +1,14 @@
 import streamlit as st
 import plotly.graph_objects as go
+import plotly.express as px
 from utils.data_generator import (
     generate_kpi_data, generate_trend_data, generate_channel_data,
-    generate_top_products, generate_alert_data, generate_order_stream
+    generate_top_products, generate_alert_data, generate_order_stream,
+    get_available_dates, get_kpi_detail
 )
 from datetime import datetime
 
-st.set_page_config(page_title="企业数据监控大屏", page_icon="", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="企业数据监控大屏", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
 
 # 全局CSS
 st.markdown("""
@@ -17,15 +19,61 @@ header { visibility: hidden; }
 footer { visibility: hidden; }
 .block-container { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; max-width: 100% !important; }
 [data-testid="stSidebar"] { display: none; }
-.stButton > button { background: #1e293b !important; color: #94a3b8 !important; border: 1px solid #334155 !important; border-radius: 6px !important; font-size: 12px !important; }
-.stButton > button:hover { background: #334155 !important; color: #e2e8f0 !important; }
+.stButton > button { background: #1e293b !important; color: #94a3b8 !important; border: 1px solid #334155 !important; border-radius: 6px !important; font-size: 12px !important; cursor: pointer !important; }
+.stButton > button:hover { background: #334155 !important; color: #e2e8f0 !important; border-color: #3b82f6 !important; }
+.stSelectbox > div > div { background: #1e293b !important; border: 1px solid #334155 !important; border-radius: 6px !important; }
+.stSelectbox label { color: #94a3b8 !important; font-size: 12px !important; }
+div[data-testid="stHorizontalBlock"] { gap: 8px !important; }
 </style>
 """, unsafe_allow_html=True)
+
+# 初始化session_state
+if "selected_kpi" not in st.session_state:
+    st.session_state.selected_kpi = None
+if "date_filter" not in st.session_state:
+    st.session_state.date_filter = "今日"
 
 now = datetime.now()
 current_time = now.strftime("%Y-%m-%d %H:%M:%S")
 
-# ========== 顶部通栏 (用 st.html) ==========
+# ========== 时间筛选器配置 ==========
+time_options = ["今日", "昨日", "本周", "本月", "自定义日期"]
+
+# ========== 顶部通栏（含真实时间筛选器）==========
+# 用 columns 实现可交互的筛选器
+filter_col1, filter_col2, filter_col3 = st.columns([1, 4, 1])
+
+with filter_col1:
+    selected_period = st.selectbox("时间范围", time_options, key="time_filter", label_visibility="collapsed")
+
+with filter_col3:
+    if st.button("🔄 刷新数据", key="refresh_btn"):
+        st.rerun()
+
+# 确定查询日期
+if selected_period == "今日":
+    query_date = now.strftime("%Y-%m-%d")
+    compare_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+elif selected_period == "昨日":
+    query_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    compare_date = (now - timedelta(days=2)).strftime("%Y-%m-%d")
+elif selected_period == "本周":
+    query_date = (now - timedelta(days=now.weekday())).strftime("%Y-%m-%d")
+elif selected_period == "本月":
+    query_date = now.strftime("%Y-%m-01")
+else:
+    query_date = st.date_input("选择日期", now).strftime("%Y-%m-%d")
+
+# 如果选了"本周"或"本月"，则显示汇总数据
+# 简化处理: 自定义日期也支持
+if selected_period == "自定义日期":
+    compare_date = (datetime.strptime(query_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+else:
+    compare_date = (datetime.strptime(query_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+
+from datetime import timedelta
+
+# ========== 顶部通栏 ==========
 header_html = f"""
 <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(15,23,42,0.9); border:1px solid #334155; border-radius:12px; padding:14px 24px; margin-bottom:16px;">
     <div style="display:flex; align-items:center; gap:12px;">
@@ -36,63 +84,119 @@ header_html = f"""
         <div style="width:2px; height:32px; background:#3b82f6; border-radius:1px;"></div>
     </div>
     <div style="text-align:center;">
+        <div style="font-size:14px; color:#64748b;">数据日期: <span style="color:#e2e8f0; font-weight:600;">{query_date}</span></div>
         <div style="font-size:24px; font-weight:700; color:#e2e8f0; font-family:monospace;">{current_time}</div>
-        <div style="font-size:11px; color:#64748b; margin-top:2px;">数据每 5 秒自动刷新</div>
     </div>
-    <div style="display:flex; align-items:center; gap:10px;">
-        <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:4px 12px;"><span style="color:#64748b; font-size:11px;">今日</span></div>
-        <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:4px 12px;"><span style="color:#64748b; font-size:11px;">全渠道</span></div>
-        <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:6px 14px; cursor:pointer;"><span style="color:#3b82f6; font-size:12px; font-weight:600;">刷新</span></div>
+    <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:6px; background:#064e3b; border:1px solid #10b981; border-radius:20px; padding:4px 14px;">
+            <div style="width:8px; height:8px; background:#10b981; border-radius:50%; animation:pulse 2s infinite;"></div>
+            <span style="color:#10b981; font-size:11px; font-weight:600;">系统运行中</span>
+        </div>
     </div>
 </div>
+<style>@keyframes pulse {{ 0%, 100% {{ opacity:1; }} 50% {{ opacity:0.4; }} }}</style>
 """
 st.html(header_html)
 
-# ========== KPI 卡片 (用 st.html) ==========
-kpi_data = generate_kpi_data()
+# ========== KPI 卡片（可点击下钻）==========
+kpi_data = generate_kpi_data(query_date, compare_date)
 kpi_items = [
-    ("实时销售额", kpi_data["sales"]["value"], kpi_data["sales"]["unit"], kpi_data["sales"]["change"], kpi_data["sales"]["trend"], "#3b82f6"),
-    ("实时订单量", kpi_data["orders"]["value"], kpi_data["orders"]["unit"], kpi_data["orders"]["change"], kpi_data["orders"]["trend"], "#8b5cf6"),
-    ("在线用户数", kpi_data["users"]["value"], kpi_data["users"]["unit"], kpi_data["users"]["change"], kpi_data["users"]["trend"], "#ec4899"),
-    ("整体转化率", kpi_data["conversion"]["value"], kpi_data["conversion"]["unit"], kpi_data["conversion"]["change"], kpi_data["conversion"]["trend"], "#10b981"),
-    ("客单价", kpi_data["avg_order"]["value"], kpi_data["avg_order"]["unit"], kpi_data["avg_order"]["change"], kpi_data["avg_order"]["trend"], "#f59e0b"),
-    ("复购用户", kpi_data["repeat"]["value"], kpi_data["repeat"]["unit"], kpi_data["repeat"]["change"], kpi_data["repeat"]["trend"], "#06b6d4"),
+    ("实时销售额", kpi_data["sales"]["value"], kpi_data["sales"]["unit"], kpi_data["sales"]["change"], kpi_data["sales"]["trend"], "#3b82f6", "sales"),
+    ("实时订单量", kpi_data["orders"]["value"], kpi_data["orders"]["unit"], kpi_data["orders"]["change"], kpi_data["orders"]["trend"], "#8b5cf6", "orders"),
+    ("在线用户数", kpi_data["users"]["value"], kpi_data["users"]["unit"], kpi_data["users"]["change"], kpi_data["users"]["trend"], "#ec4899", "users"),
+    ("整体转化率", kpi_data["conversion"]["value"], kpi_data["conversion"]["unit"], kpi_data["conversion"]["change"], kpi_data["conversion"]["trend"], "#10b981", "conversion"),
+    ("客单价", kpi_data["avg_order"]["value"], kpi_data["avg_order"]["unit"], kpi_data["avg_order"]["change"], kpi_data["avg_order"]["trend"], "#f59e0b", "avg_order"),
+    ("复购用户", kpi_data["repeat"]["value"], kpi_data["repeat"]["unit"], kpi_data["repeat"]["change"], kpi_data["repeat"]["trend"], "#06b6d4", "repeat"),
 ]
 
-kpi_html = '<div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:14px; margin-bottom:16px;">'
-for title, value, unit, change, trend, color in kpi_items:
-    if trend == "up":
-        arrow = "&#9650;"; change_color = "#10b981"; change_bg = "rgba(16,185,129,0.1)"
-    elif trend == "down":
-        arrow = "&#9660;"; change_color = "#ef4444"; change_bg = "rgba(239,68,68,0.1)"
+kpi_cols = st.columns(6)
+for i, (title, value, unit, change, trend, color, key) in enumerate(kpi_items):
+    with kpi_cols[i]:
+        if trend == "up":
+            arrow = "▲"; change_color = "#10b981"; change_bg = "rgba(16,185,129,0.1)"
+        elif trend == "down":
+            arrow = "▼"; change_color = "#ef4444"; change_bg = "rgba(239,68,68,0.1)"
+        else:
+            arrow = "─"; change_color = "#64748b"; change_bg = "rgba(100,116,139,0.1)"
+        change_text = f"{change:+.1f}%" if change != 0 else "持平"
+        
+        kpi_html = f"""
+        <div style="background:linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%); border:1px solid {color}33; border-radius:12px; padding:14px 12px; position:relative; overflow:hidden;">
+            <div style="position:absolute; top:0; left:0; right:0; height:3px; background:{color}; border-radius:12px 12px 0 0;"></div>
+            <div style="font-size:12px; color:#94a3b8; margin-bottom:6px; font-weight:500;">{title}</div>
+            <div style="display:flex; align-items:baseline; gap:4px; margin-bottom:6px;">
+                <span style="font-size:26px; font-weight:800; color:#e2e8f0;">{value}</span>
+                <span style="font-size:13px; color:#64748b;">{unit}</span>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:4px; background:{change_bg}; padding:3px 10px; border-radius:20px;">
+                <span style="color:{change_color}; font-size:12px; font-weight:600;">{arrow} {change_text}</span>
+            </div>
+        </div>
+        """
+        st.html(kpi_html)
+        
+        # 点击下钻
+        if st.button(f"📊 查看详情", key=f"drill_{key}"):
+            st.session_state.selected_kpi = key
+
+# ========== KPI 下钻面板 ==========
+if st.session_state.selected_kpi:
+    kpi_name_map = {
+        "sales": "销售额",
+        "orders": "订单量",
+        "users": "在线用户",
+        "conversion": "转化率",
+        "avg_order": "客单价",
+        "repeat": "复购用户",
+    }
+    drill_name = kpi_name_map.get(st.session_state.selected_kpi, st.session_state.selected_kpi)
+    
+    st.html(f"""
+    <div style="background:rgba(30,41,59,0.9); border:1px solid #3b82f6; border-radius:12px; padding:16px; margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <div style="width:4px; height:18px; background:#3b82f6; border-radius:2px;"></div>
+                <span style="font-size:15px; font-weight:700; color:#e2e8f0;">📈 {drill_name} 分时明细</span>
+                <span style="font-size:11px; color:#64748b;">({query_date})</span>
+            </div>
+        </div>
+    </div>
+    """)
+    
+    detail_df = get_kpi_detail(st.session_state.selected_kpi, query_date)
+    if not detail_df.empty:
+        fig_detail = go.Figure()
+        fig_detail.add_trace(go.Bar(
+            x=detail_df["时间"], y=detail_df["值"],
+            marker=dict(color="#3b82f6", line=dict(color="#1e293b", width=0.5)),
+            hovertemplate="<b>%{x}</b><br>" + drill_name + ": %{y}<extra></extra>",
+        ))
+        fig_detail.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=0, b=30), height=200,
+            xaxis=dict(showgrid=False, tickfont=dict(color="#64748b", size=10)),
+            yaxis=dict(showgrid=True, gridcolor="rgba(51,65,85,0.5)", tickfont=dict(color="#64748b", size=10)),
+            showlegend=False,
+        )
+        st.plotly_chart(fig_detail, use_container_width=True)
     else:
-        arrow = "&#9472;"; change_color = "#64748b"; change_bg = "rgba(100,116,139,0.1)"
-    change_text = f"{change:+.1f}%" if change != 0 else "持平"
-    kpi_html += f"""
-    <div style="background:linear-gradient(135deg, rgba(30,41,59,0.9) 0%, rgba(15,23,42,0.95) 100%); border:1px solid {color}33; border-radius:12px; padding:18px 16px; position:relative; overflow:hidden;">
-        <div style="position:absolute; top:0; left:0; right:0; height:3px; background:{color}; border-radius:12px 12px 0 0;"></div>
-        <div style="font-size:12px; color:#94a3b8; margin-bottom:8px; font-weight:500;">{title}</div>
-        <div style="display:flex; align-items:baseline; gap:4px; margin-bottom:8px;">
-            <span style="font-size:26px; font-weight:800; color:#e2e8f0;">{value}</span>
-            <span style="font-size:13px; color:#64748b;">{unit}</span>
-        </div>
-        <div style="display:inline-flex; align-items:center; gap:4px; background:{change_bg}; padding:3px 10px; border-radius:20px;">
-            <span style="color:{change_color}; font-size:12px; font-weight:600;">{arrow} {change_text}</span>
-        </div>
-    </div>"""
-kpi_html += '</div>'
-st.html(kpi_html)
+        st.info("暂无该指标的明细数据")
+    
+    if st.button("✕ 关闭", key="close_drill"):
+        st.session_state.selected_kpi = None
+        st.rerun()
 
 # ========== 核心指标趋势 ==========
 st.html("""
-<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+<div style="display:flex; align-items:center; gap:10px; margin-top:16px; margin-bottom:12px;">
     <div style="width:4px; height:18px; background:#3b82f6; border-radius:2px;"></div>
     <span style="font-size:15px; font-weight:700; color:#e2e8f0;">核心指标分时趋势</span>
     <div style="flex:1; height:1px; background:#334155;"></div>
+    <span style="font-size:11px; color:#64748b;">📅 """ + query_date + """</span>
 </div>
 """)
 
-trend_df = generate_trend_data(24)
+trend_df = generate_trend_data(24, query_date)
 col1, col2, col3 = st.columns(3)
 chart_configs = [
     (col1, "销售额分时趋势", "销售额", "#3b82f6", "rgba(59,130,246,0.15)"),
@@ -150,7 +254,7 @@ with col1:
 
 with col2:
     st.markdown("<p style='color:#94a3b8; font-size:13px; font-weight:600; margin-bottom:8px;'>渠道订单占比</p>", unsafe_allow_html=True)
-    channel_df = generate_channel_data()
+    channel_df = generate_channel_data(query_date)
     fig_channel = go.Figure(data=[go.Pie(
         labels=channel_df["渠道"], values=channel_df["订单量"], hole=0.6,
         textinfo="label+percent", textfont=dict(size=11, color="#e2e8f0"),
@@ -169,7 +273,7 @@ with col2:
 
 with col3:
     st.markdown("<p style='color:#94a3b8; font-size:13px; font-weight:600; margin-bottom:8px;'>热销商品 TOP10</p>", unsafe_allow_html=True)
-    top_df = generate_top_products()
+    top_df = generate_top_products(query_date)
     colors_top = ["#f59e0b" if i == 0 else "#3b82f6" for i in range(len(top_df))]
     fig_top = go.Figure()
     fig_top.add_trace(go.Bar(
@@ -199,34 +303,38 @@ col_left, col_right = st.columns([1, 1])
 
 with col_left:
     st.markdown("<p style='color:#94a3b8; font-size:13px; font-weight:600; margin-bottom:10px;'>告警监控</p>", unsafe_allow_html=True)
-
-    # 告警统计
-    alert_stats_html = """
+    
+    alert_df = generate_alert_data(query_date)
+    
+    # 计算各级别数量
+    high_count = len(alert_df[alert_df["level"] == "高危"])
+    mid_count = len(alert_df[alert_df["level"] == "中危"])
+    low_count = len(alert_df[alert_df["level"] == "低危"])
+    
+    alert_stats_html = f"""
     <div style="display:flex; gap:10px; margin-bottom:14px;">
         <div style="flex:1; background:#7f1d1d; border:1px solid #b91c1c; border-radius:8px; padding:10px; text-align:center;">
-            <div style="font-size:20px; font-weight:800; color:#fca5a5;">1</div>
+            <div style="font-size:20px; font-weight:800; color:#fca5a5;">{high_count}</div>
             <div style="font-size:11px; color:#f87171; margin-top:2px;">高危告警</div>
         </div>
         <div style="flex:1; background:#713f12; border:1px solid #ca8a04; border-radius:8px; padding:10px; text-align:center;">
-            <div style="font-size:20px; font-weight:800; color:#fde047;">2</div>
+            <div style="font-size:20px; font-weight:800; color:#fde047;">{mid_count}</div>
             <div style="font-size:11px; color:#facc15; margin-top:2px;">中危告警</div>
         </div>
         <div style="flex:1; background:#1e3a5f; border:1px solid #3b82f6; border-radius:8px; padding:10px; text-align:center;">
-            <div style="font-size:20px; font-weight:800; color:#93c5fd;">2</div>
+            <div style="font-size:20px; font-weight:800; color:#93c5fd;">{low_count}</div>
             <div style="font-size:11px; color:#60a5fa; margin-top:2px;">低危告警</div>
         </div>
     </div>
     """
     st.html(alert_stats_html)
-
-    # 告警列表
-    alert_df = generate_alert_data()
-    for _, row in alert_df.head(4).iterrows():
+    
+    for _, row in alert_df.iterrows():
         level_color = {"高危": "#ef4444", "中危": "#f59e0b", "低危": "#3b82f6"}[row["level"]]
         level_bg = {"高危": "#7f1d1d", "中危": "#713f12", "低危": "#1e3a5f"}[row["level"]]
         status_color = {"未处理": "#ef4444", "处理中": "#f59e0b", "已处理": "#10b981"}[row["status"]]
         status_bg = {"未处理": "#7f1d1d", "处理中": "#713f12", "已处理": "#064e3b"}[row["status"]]
-
+        
         alert_item_html = f"""
         <div style="background:#0f172a; border-radius:6px; padding:10px 12px; margin-bottom:8px; border-left:3px solid {level_color};">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -247,7 +355,7 @@ with col_left:
 with col_right:
     st.markdown("<p style='color:#94a3b8; font-size:13px; font-weight:600; margin-bottom:10px;'>实时订单流水</p>", unsafe_allow_html=True)
     order_df = generate_order_stream()
-
+    
     table_html = """
     <table style="width:100%; border-collapse:collapse; font-size:12px;">
         <thead>
@@ -266,9 +374,10 @@ with col_right:
     }
     for _, row in order_df.iterrows():
         bg, color = status_colors.get(row["订单状态"], ("#1e293b", "#94a3b8"))
+        order_id = row["订单编号"][-8:] if len(str(row["订单编号"])) > 8 else row["订单编号"]
         table_html += f"""
         <tr style="border-bottom:1px solid #1e293b;">
-            <td style="padding:8px 10px; color:#cbd5e1; font-family:monospace; font-size:11px;">{row["订单编号"][-8:]}</td>
+            <td style="padding:8px 10px; color:#cbd5e1; font-family:monospace; font-size:11px;">{order_id}</td>
             <td style="padding:8px 10px; color:#94a3b8; font-size:11px;">{row["下单时间"]}</td>
             <td style="padding:8px 10px; color:#e2e8f0; text-align:right; font-weight:600;">{row["消费金额"]}</td>
             <td style="padding:8px 10px; text-align:center;">
@@ -279,12 +388,10 @@ with col_right:
     table_html += "</tbody></table>"
     st.html(table_html)
 
-# ========== 导出按钮 ==========
+# ========== 底部信息 ==========
 st.markdown("<br>", unsafe_allow_html=True)
-export_col1, export_col2, export_col3 = st.columns([1, 1, 4])
-with export_col1:
-    if st.button("导出报表", key="export_btn"):
-        st.toast("报表导出成功！", icon="")
-with export_col2:
-    if st.button("全屏展示", key="fullscreen_btn"):
-        st.toast("按 F11 进入全屏模式", icon="")
+st.html(f"""
+<div style="text-align:center; padding:12px; color:#475569; font-size:11px; border-top:1px solid #1e293b; margin-top:16px;">
+    📊 数据来源: 模拟电商业务数据 (90天) | 系统时间: {current_time} | 数据日期: {query_date}
+</div>
+""")
