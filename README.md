@@ -39,12 +39,12 @@ flowchart LR
     CSV -->|首次导入| DB
     DB --> API
     CSV --> FE
-    API -->|HTTP + CORS| FE
+    API -.->|HTTP + CORS，可被外部系统调用| FE
 ```
 
 - **数据层**：`data/` 下的 5 张业务表 CSV（日度 KPI、小时趋势、渠道、商品、订单流），后端首次启动自动建表导入 SQLite。
 - **服务层**：`backend/app.py` 提供 5 个 RESTful 接口，支持跨域（CORS），可被任意前端复用。
-- **展示层**：`app.py` + `pages/` 三页 + API 文档页，均读取同一份数据，前后端分离。
+- **展示层**：`app.py` + `pages/` 三页 + API 文档页直接读取 CSV 数据；API 独立运行，供外部系统或未来前后端分离时复用。
 
 ---
 
