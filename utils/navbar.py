@@ -307,7 +307,7 @@ def render_navbar(current_page: str = "监控总览"):
     <div class="top-header">
         <div>
             <div class="top-header-title">企业数据智能监控大屏</div>
-            <div class="top-header-subtitle">全链路业务数据准实时监控 | 智能预警 | 多维度分析</div>
+            <div class="top-header-subtitle">全链路业务数据监控 | 智能预警 | 多维度分析</div>
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
             <div class="live-indicator">
