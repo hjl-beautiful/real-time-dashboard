@@ -9,7 +9,7 @@ import plotly.express as px
 from utils.data_generator import (
     generate_kpi_data, generate_trend_data, generate_channel_data,
     generate_top_products, generate_alert_data, generate_order_stream,
-    get_kpi_detail
+    get_kpi_detail, get_kpi_detail_by_dimension
 )
 from utils.navbar import render_navbar, render_sidebar, resolve_query_date
 from datetime import datetime, timedelta
@@ -42,7 +42,7 @@ kpi_items = [
 with st.container(border=True):
     st.markdown(
         '<div class="panel-header" style="margin-bottom:10px;">核心经营指标 '
-        '<span style="font-size:11px; color:#cbd5e1; font-weight:400; margin-left:6px;">点击卡片可下钻查看 24 小时分时明细</span></div>',
+        '<span style="font-size:11px; color:#cbd5e1; font-weight:400; margin-left:6px;">点击卡片可下钻查看多维度明细</span></div>',
         unsafe_allow_html=True
     )
 
@@ -77,7 +77,7 @@ with st.container(border=True):
             if st.button("查看明细", key=f"drill_{key}", use_container_width=True):
                 st.session_state.selected_kpi = key
 
-# ========== KPI 下钻面板 ==========
+# ========== KPI 多维度下钻面板 ==========
 if st.session_state.selected_kpi:
     kpi_name_map = {
         "sales": "销售额",
@@ -89,35 +89,74 @@ if st.session_state.selected_kpi:
     }
     drill_name = kpi_name_map.get(st.session_state.selected_kpi, st.session_state.selected_kpi)
 
+    # 不同 KPI 支持的下钻维度
+    dimension_options = {
+        "sales": ["时间", "渠道", "城市", "商品分类"],
+        "orders": ["时间", "渠道", "城市"],
+        "users": ["时间", "城市"],
+        "conversion": ["时间", "渠道", "城市"],
+        "avg_order": ["时间", "渠道", "城市", "商品分类"],
+        "repeat": ["时间", "城市"],
+    }
+    available_dims = dimension_options.get(st.session_state.selected_kpi, ["时间"])
+    dim_key = f"drill_dim_{st.session_state.selected_kpi}"
+    if dim_key not in st.session_state:
+        st.session_state[dim_key] = available_dims[0]
+
     with st.container(border=True):
         st.markdown(
-            f'<div class="panel-header">{drill_name} 分时明细 '
+            f'<div class="panel-header">{drill_name} 下钻分析 '
             f'<span style="font-size:11px; color:#cbd5e1; font-weight:400; margin-left:6px;">({query_date})</span></div>',
             unsafe_allow_html=True
         )
 
-        detail_df = get_kpi_detail(st.session_state.selected_kpi, query_date)
+        col_dim, col_close = st.columns([3, 1])
+        with col_dim:
+            selected_dim = st.selectbox(
+                "选择下钻维度",
+                available_dims,
+                key=dim_key,
+                label_visibility="collapsed"
+            )
+        with col_close:
+            st.write("")
+            st.write("")
+            if st.button("关闭明细", key="close_drill", use_container_width=True):
+                st.session_state.selected_kpi = None
+                st.rerun()
+
+        detail_df = get_kpi_detail_by_dimension(st.session_state.selected_kpi, selected_dim, query_date)
         if not detail_df.empty:
+            x_col = detail_df.columns[0]
+            y_col = detail_df.columns[1]
+
             fig_detail = go.Figure()
             fig_detail.add_trace(go.Bar(
-                x=detail_df["时间"], y=detail_df["值"],
+                x=detail_df[x_col], y=detail_df[y_col],
                 marker=dict(color="#3b82f6", line=dict(color="#1e293b", width=0.5)),
-                hovertemplate="<b>%{x}</b><br>" + drill_name + ": %{y}<extra></extra>",
+                hovertemplate=f"<b>%{{x}}</b><br>{drill_name}: %{{y}}<extra></extra>",
             ))
             fig_detail.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=10, b=30), height=200,
-                xaxis=dict(showgrid=False, tickfont=dict(color="#cbd5e1", size=10), tickangle=45, nticks=12),
+                margin=dict(l=0, r=0, t=10, b=30), height=240,
+                xaxis=dict(showgrid=False, tickfont=dict(color="#cbd5e1", size=10), tickangle=45),
                 yaxis=dict(showgrid=True, gridcolor="rgba(51,65,85,0.5)", tickfont=dict(color="#cbd5e1", size=10)),
                 showlegend=False,
             )
             st.plotly_chart(fig_detail, use_container_width=True)
+
+            st.markdown(
+                f"<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin:8px 0;'>{drill_name} - {selected_dim} 明细</p>",
+                unsafe_allow_html=True
+            )
+            st.dataframe(
+                detail_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={x_col: st.column_config.TextColumn(x_col), y_col: st.column_config.NumberColumn(y_col)},
+            )
         else:
             st.info("暂无该指标的明细数据")
-
-        if st.button("关闭明细", key="close_drill", use_container_width=True):
-            st.session_state.selected_kpi = None
-            st.rerun()
 
 # ========== 核心指标趋势 ==========
 with st.container(border=True):
@@ -309,7 +348,7 @@ with st.container(border=True):
 # ========== 底部信息 ==========
 st.markdown(f"""
 <div style="text-align:center; padding:12px; color:#cbd5e1; font-size:11px; border-top:1px solid rgba(100,180,255,0.1); margin-top:12px;">
-    数据来源: 91天自洽业务数据 | 系统时间: {current_time} | 数据日期: {query_date}
+    数据来源: 91天业务数据 | 系统时间: {current_time} | 数据日期: {query_date}
 </div>
 """, unsafe_allow_html=True)
 

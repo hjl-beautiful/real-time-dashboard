@@ -340,3 +340,172 @@ def get_kpi_detail(kpi_name, date_str=None):
         })
     
     return pd.DataFrame()
+
+
+def get_kpi_detail_by_dimension(kpi_name, dimension, date_str=None):
+    """
+    按维度下钻获取 KPI 明细。
+    dimension 可选：时间、渠道、城市、商品分类
+    """
+    if date_str is None:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+
+    # 1. 时间维度：24 小时明细（各 KPI 按可用字段计算或近似）
+    if dimension == "时间":
+        if df_hourly.empty:
+            return pd.DataFrame()
+        day_data = df_hourly[df_hourly["date"] == date_str]
+        if day_data.empty:
+            day_data = df_hourly[df_hourly["date"] == df_hourly["date"].max()]
+        if day_data.empty:
+            return pd.DataFrame()
+
+        day_data = day_data.sort_values("hour")
+        hours = [f"{int(h):02d}:00" for h in day_data["hour"]]
+
+        if kpi_name == "sales":
+            values = day_data["sales_yuan"].tolist()
+        elif kpi_name == "orders":
+            values = day_data["orders"].astype(int).tolist()
+        elif kpi_name == "users":
+            values = day_data["users"].astype(int).tolist()
+        elif kpi_name == "conversion":
+            # 近似转化率 = 订单量 / 在线用户 * 100，上限 100
+            values = ((day_data["orders"] / day_data["users"].replace(0, 1)) * 100).clip(upper=100).round(1).tolist()
+        elif kpi_name == "avg_order":
+            # 近似客单价 = 销售额 / 订单量
+            values = (day_data["sales_yuan"] / day_data["orders"].replace(0, 1)).round(1).tolist()
+        else:  # repeat
+            # 近似复购用户 = 在线用户 * 20%
+            values = (day_data["users"] * 0.2).astype(int).tolist()
+
+        return pd.DataFrame({"时间": hours, "值": values})
+
+    # 2. 渠道维度
+    if dimension == "渠道":
+        if df_channel.empty:
+            return pd.DataFrame()
+        day_data = df_channel[df_channel["date"] == date_str]
+        if day_data.empty:
+            day_data = df_channel[df_channel["date"] == df_channel["date"].max()]
+        if day_data.empty:
+            return pd.DataFrame()
+
+        day_data = day_data.sort_values("orders", ascending=False)
+        if kpi_name in ("sales", "orders"):
+            return pd.DataFrame({
+                "维度": day_data["channel"].tolist(),
+                "值": day_data["orders"].astype(int).tolist(),
+            })
+        elif kpi_name == "users":
+            # 用户数按渠道占比近似拆分
+            total_users = generate_kpi_data(date_str).get("users", {}).get("value", 1000)
+            return pd.DataFrame({
+                "维度": day_data["channel"].tolist(),
+                "值": (day_data["share_pct"] / 100 * total_users).astype(int).tolist(),
+            })
+        elif kpi_name == "conversion":
+            # 转化率按渠道统一基线加随机扰动
+            base = generate_kpi_data(date_str).get("conversion", {}).get("value", 30.0)
+            return pd.DataFrame({
+                "维度": day_data["channel"].tolist(),
+                "值": [round(base + random.uniform(-5, 5), 1) for _ in range(len(day_data))],
+            })
+        elif kpi_name == "avg_order":
+            base = generate_kpi_data(date_str).get("avg_order", {}).get("value", 200.0)
+            return pd.DataFrame({
+                "维度": day_data["channel"].tolist(),
+                "值": [round(base + random.uniform(-30, 40), 1) for _ in range(len(day_data))],
+            })
+        else:  # repeat
+            return pd.DataFrame({
+                "维度": day_data["channel"].tolist(),
+                "值": (day_data["share_pct"] / 100 * 300).astype(int).tolist(),
+            })
+
+    # 3. 城市维度（基于订单流水）
+    if dimension == "城市":
+        if df_orders.empty:
+            return pd.DataFrame()
+        # 只取当天订单；CSV 没有日期字段，这里用所有数据演示
+        city_group = df_orders.groupby("user_city").agg({
+            "amount_yuan": "sum",
+            "order_id": "count",
+        }).reset_index()
+        city_group.columns = ["user_city", "amount", "orders"]
+        city_group = city_group.sort_values("amount", ascending=False).head(15)
+
+        if kpi_name == "sales":
+            return pd.DataFrame({
+                "维度": city_group["user_city"].tolist(),
+                "值": city_group["amount"].round(2).tolist(),
+            })
+        elif kpi_name == "orders":
+            return pd.DataFrame({
+                "维度": city_group["user_city"].tolist(),
+                "值": city_group["orders"].astype(int).tolist(),
+            })
+        elif kpi_name == "users":
+            # 按订单量近似估算用户数
+            return pd.DataFrame({
+                "维度": city_group["user_city"].tolist(),
+                "值": (city_group["orders"] * 0.7).astype(int).tolist(),
+            })
+        elif kpi_name == "conversion":
+            base = generate_kpi_data(date_str).get("conversion", {}).get("value", 30.0)
+            return pd.DataFrame({
+                "维度": city_group["user_city"].tolist(),
+                "值": [round(base + random.uniform(-6, 6), 1) for _ in range(len(city_group))],
+            })
+        elif kpi_name == "avg_order":
+            return pd.DataFrame({
+                "维度": city_group["user_city"].tolist(),
+                "值": (city_group["amount"] / city_group["orders"].replace(0, 1)).round(1).tolist(),
+            })
+        else:  # repeat
+            return pd.DataFrame({
+                "维度": city_group["user_city"].tolist(),
+                "值": (city_group["orders"] * 0.15).astype(int).tolist(),
+            })
+
+    # 4. 商品分类维度（仅销售额、订单量、客单价较合理）
+    if dimension == "商品分类":
+        if df_products.empty:
+            return pd.DataFrame()
+        day_data = df_products[df_products["date"] == date_str]
+        if day_data.empty:
+            day_data = df_products[df_products["date"] == df_products["date"].max()]
+        if day_data.empty:
+            return pd.DataFrame()
+
+        cat_group = day_data.groupby("category").agg({
+            "revenue_wan": "sum",
+            "sales_count": "sum",
+            "price_yuan": "mean",
+        }).reset_index()
+        cat_group.columns = ["category", "revenue", "sales_count", "avg_price"]
+        cat_group = cat_group.sort_values("revenue", ascending=False)
+
+        if kpi_name == "sales":
+            return pd.DataFrame({
+                "维度": cat_group["category"].tolist(),
+                "值": cat_group["revenue"].round(2).tolist(),
+            })
+        elif kpi_name == "orders":
+            return pd.DataFrame({
+                "维度": cat_group["category"].tolist(),
+                "值": cat_group["sales_count"].astype(int).tolist(),
+            })
+        elif kpi_name == "avg_order":
+            return pd.DataFrame({
+                "维度": cat_group["category"].tolist(),
+                "值": cat_group["avg_price"].round(1).tolist(),
+            })
+        else:
+            # 其他指标用销售额占比近似
+            return pd.DataFrame({
+                "维度": cat_group["category"].tolist(),
+                "值": cat_group["revenue"].round(2).tolist(),
+            })
+
+    return pd.DataFrame()
