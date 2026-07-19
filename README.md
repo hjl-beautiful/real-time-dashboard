@@ -52,7 +52,7 @@ flowchart LR
 
 - **前端**：Python 3.11 + Streamlit（深色科技风 BI 大屏）
 - **后端 API**：Flask 3.x + Flask-CORS
-- **数据库**：SQLite（由 CSV 自动建表导入）
+- **数据库**：SQLite（轻量内嵌，便于演示；架构支持平滑切换至 MySQL/PostgreSQL）
 - **数据处理**：Pandas + NumPy
 - **可视化**：Plotly
 - **部署**：Streamlit Cloud / Docker / Gunicorn + Nginx
@@ -70,6 +70,16 @@ flowchart LR
 | `orders_stream.csv` | `order_stream` | 订单流：order_id, order_time, amount_yuan, channel, status, user_city |
 
 > 数据逻辑自洽：销售额 = 订单量 × 客单价；区分工作日/周末、白天/夜间时段效应；渠道占比总和 = 100%。
+
+### 数据来源说明
+
+本项目数据由 `data/generate_business_data.py` 基于**真实电商业务规则模拟生成**（91 天日度数据），用于演示 BI 大屏的完整链路与交互能力：
+
+- 模拟规则遵循真实业务逻辑：周末效应、季节性波动、白天/夜间时段差异、渠道占比约束
+- 数据规模与真实电商日活量级匹配（日均订单 4500+、客单价 200-400 元）
+- **不涉及真实用户隐私数据**，可安全用于演示与教学
+
+> 如需对接真实业务数据，替换 `data/` 下的 CSV 文件即可，无需改动前端与 API 代码。
 
 ---
 
@@ -152,4 +162,4 @@ docker run -p 8501:8501 enterprise-dashboard
 
 ## 面试话术
 
-> 独立开发面向业务方的准实时数据监控 BI 平台，覆盖销售/订单/用户/转化/商品 5 大模块。基于 91 天业务数据，使用 Pandas + SQL 实现指标计算，Plotly 实现多维度可视化。配套 Flask RESTful API 和 SQLite 数据库，支持时间筛选、指标下钻、对比分析。全栈设计：数据层 → 服务层 → 展示层，前端 Streamlit 与后端 API 解耦可独立部署。
+> 面向业务方的准实时数据监控 BI 平台，覆盖销售/订单/用户/转化/商品 5 大模块。基于 91 天业务数据（按真实电商规则模拟生成），使用 Pandas + SQL 实现指标计算，Plotly 实现多维度可视化。配套 Flask RESTful API 和 SQLite 数据库，支持时间筛选、指标下钻、对比分析。全栈设计：数据层 → 服务层 → 展示层，前端 Streamlit 与后端 API 解耦可独立部署，数据库可平滑切换 MySQL/PostgreSQL。
