@@ -299,6 +299,55 @@ def generate_order_stream(n=8):
     return pd.DataFrame(out)
 
 
+# ========== 付款转化漏斗 ==========
+def generate_funnel_data(date_str=None):
+    """下单 → 付款 → 完成 的转化漏损（基于真实订单）。"""
+    if ORDERS.empty:
+        return pd.DataFrame({"阶段": ["总下单", "已付款", "已完成"], "数量": [0, 0, 0]})
+    total = len(ORDERS)
+    paid = int(ORDERS["is_paid"].sum())
+    completed = int((ORDERS["is_paid"] & ~ORDERS["is_refund"]).sum())
+    return pd.DataFrame({
+        "阶段": ["总下单订单", "已付款订单", "已完成订单"],
+        "数量": [total, paid, completed],
+    })
+
+
+# ========== 优惠力度（实付率）==========
+def get_overall_discount_rate():
+    """整体实付率 = 实付金额 / 总金额（体现平台补贴/折扣深度）。"""
+    if ORDERS.empty or ORDERS["total_amount"].sum() == 0:
+        return 0.0
+    return round(ORDERS["paid_amount"].sum() / ORDERS["total_amount"].sum() * 100, 1)
+
+
+def generate_discount_data(date_str=None):
+    """各省份实付率（Top10 订单量省份）。"""
+    if ORDERS.empty:
+        return pd.DataFrame({"省份": [], "实付率(%)": []})
+    g = ORDERS.groupby("province").agg(
+        total=("total_amount", "sum"), paid=("paid_amount", "sum"), orders=("order_id", "count")
+    ).reset_index()
+    g = g[g["total"] > 0].sort_values("orders", ascending=False).head(10)
+    g["实付率(%)"] = (g["paid"] / g["total"] * 100).round(1)
+    return pd.DataFrame({"省份": g["province"].tolist(), "实付率(%)": g["实付率(%)"].tolist()})
+
+
+# ========== 客单价分布 ==========
+def generate_price_distribution(date_str=None):
+    """已付款订单的客单价（实付金额）分布直方图。"""
+    if ORDERS.empty:
+        return pd.DataFrame({"区间": [], "订单数": []})
+    paid = ORDERS[ORDERS["is_paid"] & (ORDERS["paid_amount"] > 0)]["paid_amount"]
+    if paid.empty:
+        return pd.DataFrame({"区间": ["无数据"], "订单数": [0]})
+    bins = [0, 50, 100, 200, 500, 1000, float("inf")]
+    labels = ["0-50", "50-100", "100-200", "200-500", "500-1000", "1000+"]
+    cut = pd.cut(paid, bins=bins, labels=labels, right=False)
+    counts = cut.value_counts().reindex(labels, fill_value=0)
+    return pd.DataFrame({"区间": labels, "订单数": counts.astype(int).tolist()})
+
+
 # ========== 辅助 ==========
 def get_available_dates():
     if DAILY.empty:

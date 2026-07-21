@@ -10,6 +10,8 @@ from utils.data_generator import (
     generate_kpi_data, generate_trend_data, generate_channel_data,
     generate_top_products, generate_alert_data, generate_order_stream,
     generate_province_distribution,
+    generate_funnel_data, generate_discount_data, generate_price_distribution,
+    get_overall_discount_rate,
     get_kpi_detail, get_kpi_detail_by_dimension
 )
 from utils.navbar import render_navbar, render_sidebar, resolve_query_date
@@ -252,6 +254,73 @@ with st.container(border=True):
         )
         st.plotly_chart(fig_top, use_container_width=True, key="top_chart_main")
 
+# ========== 转化与客单洞察 ==========
+with st.container(border=True):
+    st.markdown('<div class="panel-header">转化与客单洞察 · 基于真实订单</div>', unsafe_allow_html=True)
+
+    fcol1, fcol2, fcol3 = st.columns(3)
+
+    with fcol1:
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>付款转化漏斗</p>", unsafe_allow_html=True)
+        funnel_df = generate_funnel_data(query_date)
+        fig_funnel = go.Figure(go.Funnel(
+            y=funnel_df["阶段"], x=funnel_df["数量"],
+            textinfo="value+percent initial",
+            marker=dict(color=["#3b82f6", "#8b5cf6", "#10b981"]),
+            hovertemplate="<b>%{y}</b><br>订单数: %{x}<extra></extra>",
+        ))
+        fig_funnel.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=10, r=10, t=10, b=10), height=280,
+            font=dict(color="#cbd5e1", size=11),
+        )
+        st.plotly_chart(fig_funnel, use_container_width=True, key="funnel_chart")
+
+    with fcol2:
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>优惠力度（实付率）</p>", unsafe_allow_html=True)
+        overall_rate = get_overall_discount_rate()
+        st.markdown(
+            f"<div style='text-align:center; margin-bottom:10px;'>"
+            f"<span style='font-size:28px; font-weight:800; color:#34d399;'>{overall_rate}%</span>"
+            f"<span style='font-size:12px; color:#cbd5e1; margin-left:4px;'>整体实付/总价</span></div>",
+            unsafe_allow_html=True,
+        )
+        disc_df = generate_discount_data(query_date)
+        fig_disc = go.Figure()
+        fig_disc.add_trace(go.Bar(
+            y=list(reversed(disc_df["省份"].tolist())), x=list(reversed(disc_df["实付率(%)"].tolist())),
+            orientation="h", marker=dict(color="#10b981", line=dict(color="#1e293b", width=1)),
+            text=[f"{v}%" for v in reversed(disc_df["实付率(%)"].tolist())], textposition="outside",
+            textfont=dict(color="#cbd5e1", size=10),
+            hovertemplate="<b>%{y}</b><br>实付率: %{x}%<extra></extra>",
+        ))
+        fig_disc.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=50, r=40, t=0, b=10), height=240,
+            xaxis=dict(showgrid=False, showticklabels=False, range=[0, 115]),
+            yaxis=dict(showgrid=False, tickfont=dict(color="#cbd5e1", size=10)),
+            bargap=0.3,
+        )
+        st.plotly_chart(fig_disc, use_container_width=True, key="disc_chart")
+
+    with fcol3:
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>客单价分布</p>", unsafe_allow_html=True)
+        price_df = generate_price_distribution(query_date)
+        fig_price = go.Figure()
+        fig_price.add_trace(go.Bar(
+            x=price_df["区间"], y=price_df["订单数"],
+            marker=dict(color="#f59e0b", line=dict(color="#1e293b", width=1)),
+            hovertemplate="<b>%{x}</b><br>订单数: %{y}<extra></extra>",
+        ))
+        fig_price.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=0, r=0, t=0, b=10), height=240,
+            xaxis=dict(showgrid=False, tickfont=dict(color="#cbd5e1", size=10)),
+            yaxis=dict(showgrid=True, gridcolor="rgba(51,65,85,0.5)", tickfont=dict(color="#cbd5e1", size=10)),
+            bargap=0.3,
+        )
+        st.plotly_chart(fig_price, use_container_width=True, key="price_chart")
+
 # ========== 监控中心与告警 ==========
 with st.container(border=True):
     st.markdown('<div class="panel-header">监控中心与告警</div>', unsafe_allow_html=True)
@@ -286,7 +355,7 @@ with st.container(border=True):
         """
         st.html(alert_stats_html)
 
-        for _, row in alert_df.iterrows():
+        for _, row in alert_df.head(3).iterrows():
             level = row["level"]
             level_color = {"高危": "#ef4444", "中危": "#f59e0b", "低危": "#3b82f6"}[level]
             level_bg = {"高危": "#7f1d1d", "中危": "#713f12", "低危": "#1e3a5f"}[level]
@@ -309,6 +378,13 @@ with st.container(border=True):
             </div>
             """
             st.html(alert_item_html)
+
+        st.markdown(
+            "<div style='margin-top:10px; text-align:center; color:#94a3b8; font-size:11px;'>仅显示最严重 3 条 · 完整列表见告警管理页</div>",
+            unsafe_allow_html=True,
+        )
+        if st.button("查看完整告警列表 →", key="goto_alert", use_container_width=True):
+            st.switch_page("pages/alert.py")
 
     with col_right:
         st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:10px;'>订单流水</p>", unsafe_allow_html=True)
