@@ -138,24 +138,3 @@ python backend/app.py
 └── README.md
 ```
 
----
-
-## 部署
-
-### Streamlit Cloud
-1. Push 到 GitHub
-2. 在 [Streamlit Cloud](https://share.streamlit.io) 连接仓库
-3. 选择 `main` 分支，入口文件 `app.py`
-4. 点击 Deploy
-
-### Docker
-```bash
-docker build -t enterprise-dashboard .
-docker run -p 8501:8501 enterprise-dashboard
-```
-
----
-
-## 面试话术
-
-> 面向业务方的企业经营监控 BI 平台，覆盖销售/订单/付款/退款/地域 5 大模块。基于**真实公开电商订单数据（天猫订单成交数据 28,010 单）**，使用 Pandas 实现指标计算，Plotly 实现多维度可视化。支持时间筛选、指标下钻、对比分析；配套 Flask RESTful API 和 SQLite 数据库演示前后端分离架构，数据层与展示层解耦。所有指标（销售额、客单价、付款率、退款率、省份分布）均从真实订单实时计算，无模拟数据。
