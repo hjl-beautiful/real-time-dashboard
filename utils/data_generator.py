@@ -1,511 +1,366 @@
 """
-企业数据监控大屏 - 数据读取层
-从CSV读取业务数据，供前端展示使用
+企业数据监控大屏 - 数据读取层（真实数据版）
+数据源: 天猫订单成交数据（天池公开数据集 tmall_order_report.csv，28010 单）
+所有指标均基于真实订单计算，无任何模拟 / 合成数据。
 """
-import csv
 import os
 import random
-import json
-from datetime import datetime, timedelta
-
 import numpy as np
 import pandas as pd
+from datetime import datetime, timedelta
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+CSV_NAME = "tmall_order_report.csv"
 
 
-def _load_csv(filename):
-    """加载CSV并缓存"""
-    path = os.path.join(DATA_DIR, filename)
+# ========== 加载真实订单数据 ==========
+def _normalize_province(s):
+    s = str(s).strip()
+    s = s.replace("省", "").replace("市", "").replace("自治区", "")
+    s = s.replace("维吾尔", "").replace("壮族", "").replace("回族", "")
+    s = s.replace("特别行政区", "")
+    return s
+
+
+def _load_orders():
+    path = os.path.join(DATA_DIR, CSV_NAME)
     if not os.path.exists(path):
         return pd.DataFrame()
-    return pd.read_csv(path, encoding="utf-8-sig")
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    df.columns = [c.strip() for c in df.columns]
+    # 字段: 订单编号, 总金额, 买家实际支付金额, 收货地址, 订单创建时间, 订单付款时间, 退款金额
+    df = df.rename(columns={
+        "订单编号": "order_id",
+        "总金额": "total_amount",
+        "买家实际支付金额": "paid_amount",
+        "收货地址": "province",
+        "订单创建时间": "create_time",
+        "订单付款时间": "pay_time",
+        "退款金额": "refund_amount",
+    })
+    df["province"] = df["province"].apply(_normalize_province)
+    df["create_time"] = pd.to_datetime(df["create_time"], errors="coerce")
+    df["pay_time"] = pd.to_datetime(
+        df["pay_time"].astype(str).str.strip().replace("nan", ""), errors="coerce"
+    )
+    df["date"] = df["create_time"].dt.date.astype(str)
+    df["total_amount"] = pd.to_numeric(df["total_amount"], errors="coerce").fillna(0)
+    df["paid_amount"] = pd.to_numeric(df["paid_amount"], errors="coerce").fillna(0)
+    df["refund_amount"] = pd.to_numeric(df["refund_amount"], errors="coerce").fillna(0)
+    df["is_paid"] = df["pay_time"].notna()
+    df["is_refund"] = df["refund_amount"] > 0
+
+    def _status(r):
+        if r["is_refund"]:
+            return "已退款"
+        if r["is_paid"]:
+            return "已付款"
+        return "未付款"
+
+    df["status"] = df.apply(_status, axis=1)
+    return df
 
 
-# ========== 加载基础数据 ==========
 try:
-    df_kpi = _load_csv("sales_daily_kpi.csv")
-    df_hourly = _load_csv("sales_hourly.csv")
-    df_channel = _load_csv("sales_channel.csv")
-    df_products = _load_csv("sales_products.csv")
-    df_orders = _load_csv("orders_stream.csv")
+    ORDERS = _load_orders()
 except Exception as e:
     print(f"数据加载警告: {e}")
-    df_kpi = pd.DataFrame()
-    df_hourly = pd.DataFrame()
-    df_channel = pd.DataFrame()
-    df_products = pd.DataFrame()
-    df_orders = pd.DataFrame()
+    ORDERS = pd.DataFrame()
 
 
-def _get_target_date(period="today"):
-    """获取目标日期"""
-    today = datetime.now()
-    if period == "today":
-        return today
-    elif period == "yesterday":
-        return today - timedelta(days=1)
-    elif period == "week":
-        return today - timedelta(days=today.weekday())
-    return today
+def _daily():
+    if ORDERS.empty:
+        return pd.DataFrame()
+    g = ORDERS.groupby("date").agg(
+        gmv=("paid_amount", "sum"),
+        orders=("order_id", "count"),
+        paid=("is_paid", "sum"),
+        refunded=("is_refund", "sum"),
+        provinces=("province", "nunique"),
+        paid_amt=("paid_amount", "sum"),
+    ).reset_index()
+    return g.sort_values("date").reset_index(drop=True)
 
 
+DAILY = _daily()
+
+
+# ========== KPI ==========
 def generate_kpi_data(date_str=None, compare_date_str=None):
     """
-    生成KPI数据，支持对比计算变化率
-    从CSV读取指定日期的数据，自动计算环比变化
+    生成 KPI 数据（基于真实订单）。
+    date_str / compare_date_str 在数据集日期范围内定位；找不到则取最新一天。
+    变化率 = 当日 vs 数据集中前一天（真实日环比）。
     """
-    if date_str is None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-    if compare_date_str is None:
-        compare_date_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-    
-    # 读取当天数据
-    if df_kpi.empty:
+    if ORDERS.empty or DAILY.empty:
         return _fallback_kpi()
-    
-    today_row = df_kpi[df_kpi["date"] == date_str]
-    yesterday_row = df_kpi[df_kpi["date"] == compare_date_str]
-    
-    if today_row.empty:
-        # 如果当天没数据，用最近一天
-        today_row = df_kpi.iloc[[-1]]
-        date_str = today_row.iloc[0]["date"]
-    
-    t = today_row.iloc[0]
-    
-    def make_kpi(field, value, unit, compare_field=None):
-        if compare_field is None:
-            compare_field = field
-        
-        if not yesterday_row.empty:
-            prev = yesterday_row.iloc[0][compare_field]
-            if prev and prev != 0:
-                change = round((value - prev) / prev * 100, 1)
-            else:
-                change = 0.0
+
+    dates = list(DAILY["date"])
+    if date_str is None or date_str not in dates:
+        date_str = dates[-1]
+    idx = dates.index(date_str)
+    if compare_date_str is None or compare_date_str not in dates:
+        compare_date_str = dates[idx - 1] if idx > 0 else date_str
+
+    t = DAILY[DAILY["date"] == date_str].iloc[0]
+    p = DAILY[DAILY["date"] == compare_date_str].iloc[0] if compare_date_str != date_str else t
+
+    def make_kpi(value, prev, unit):
+        if prev and prev != 0:
+            change = round((value - prev) / prev * 100, 1)
         else:
             change = 0.0
-        
         trend = "up" if change > 0 else ("down" if change < 0 else "flat")
-        return {"value": value, "unit": unit, "change": change, "trend": trend}
-    
+        return {"value": round(value, 1), "unit": unit, "change": change, "trend": trend}
+
+    total = int(t["orders"])
+    paid = int(t["paid"])
+    refunded = int(t["refunded"])
+    prev_total = int(p["orders"])
+    prev_paid = int(p["paid"])
+    prev_refunded = int(p["refunded"])
+
     return {
-        "sales": make_kpi("sales_wan", round(t["sales_wan"], 1), "万"),
-        "orders": make_kpi("orders", int(t["orders"]), "单"),
-        "users": make_kpi("users", int(t["users"]), "人"),
-        "conversion": make_kpi("conversion_pct", round(t["conversion_pct"], 1), "%"),
-        "avg_order": make_kpi("avg_order_yuan", round(t["avg_order_yuan"], 1), "元"),
-        "repeat": make_kpi("repeat_users", int(t["repeat_users"]), "人"),
+        "sales": make_kpi(t["gmv"] / 10000, p["gmv"] / 10000, "万"),
+        "orders": make_kpi(total, prev_total, "单"),
+        "avg_order": make_kpi(
+            t["paid_amt"] / paid if paid else 0,
+            p["paid_amt"] / prev_paid if prev_paid else 0,
+            "元",
+        ),
+        "pay_rate": make_kpi(
+            paid / total * 100 if total else 0,
+            prev_paid / prev_total * 100 if prev_total else 0,
+            "%",
+        ),
+        "refund_rate": make_kpi(
+            refunded / total * 100 if total else 0,
+            prev_refunded / prev_total * 100 if prev_total else 0,
+            "%",
+        ),
+        "provinces": make_kpi(int(t["provinces"]), int(p["provinces"]), "个"),
     }
 
 
 def _fallback_kpi():
-    """备用KPI数据（无CSV时）"""
+    if ORDERS.empty:
+        return {
+            "sales": {"value": 0, "unit": "万", "change": 0, "trend": "flat"},
+            "orders": {"value": 0, "unit": "单", "change": 0, "trend": "flat"},
+            "avg_order": {"value": 0, "unit": "元", "change": 0, "trend": "flat"},
+            "pay_rate": {"value": 0, "unit": "%", "change": 0, "trend": "flat"},
+            "refund_rate": {"value": 0, "unit": "%", "change": 0, "trend": "flat"},
+            "provinces": {"value": 0, "unit": "个", "change": 0, "trend": "flat"},
+        }
+    paid_total = ORDERS["paid_amount"].sum()
+    n = len(ORDERS)
+    paid_n = int(ORDERS["is_paid"].sum())
     return {
-        "sales": {"value": 128.5, "unit": "万", "change": 23.1, "trend": "up"},
-        "orders": {"value": 5423, "unit": "单", "change": 14.9, "trend": "up"},
-        "users": {"value": 1742, "unit": "人", "change": -4.5, "trend": "down"},
-        "conversion": {"value": 31.8, "unit": "%", "change": 0.0, "trend": "flat"},
-        "avg_order": {"value": 236.8, "unit": "元", "change": 5.2, "trend": "up"},
-        "repeat": {"value": 328, "unit": "人", "change": -2.1, "trend": "down"},
+        "sales": {"value": round(paid_total / 10000, 1), "unit": "万", "change": 0, "trend": "flat"},
+        "orders": {"value": n, "unit": "单", "change": 0, "trend": "flat"},
+        "avg_order": {"value": round(paid_total / paid_n, 1) if paid_n else 0, "unit": "元", "change": 0, "trend": "flat"},
+        "pay_rate": {"value": round(ORDERS["is_paid"].mean() * 100, 1), "unit": "%", "change": 0, "trend": "flat"},
+        "refund_rate": {"value": round(ORDERS["is_refund"].mean() * 100, 1), "unit": "%", "change": 0, "trend": "flat"},
+        "provinces": {"value": int(ORDERS["province"].nunique()), "unit": "个", "change": 0, "trend": "flat"},
     }
 
 
+# ========== 趋势（每日真实序列）==========
 def generate_trend_data(hours=24, date_str=None):
-    """生成分时趋势数据"""
-    if date_str is None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-    
-    if not df_hourly.empty:
-        day_data = df_hourly[df_hourly["date"] == date_str]
-        if day_data.empty:
-            day_data = df_hourly[df_hourly["date"] == df_hourly["date"].max()]
-        
-        if not day_data.empty:
-            day_data = day_data.sort_values("hour")
-            return pd.DataFrame({
-                "时间": [f"{int(h):02d}:00" for h in day_data["hour"]],
-                "销售额": day_data["sales_yuan"].round(2).tolist(),
-                "订单量": day_data["orders"].astype(int).tolist(),
-                "在线用户": day_data["users"].astype(int).tolist(),
-            })
-    
-    return _fallback_trend(hours)
+    if DAILY.empty:
+        return _fallback_trend(hours)
+    return pd.DataFrame({
+        "时间": DAILY["date"].tolist(),
+        "销售额": (DAILY["gmv"] / 10000).round(2).tolist(),
+        "订单量": DAILY["orders"].astype(int).tolist(),
+        "付款订单": DAILY["paid"].astype(int).tolist(),
+    })
 
 
 def _fallback_trend(hours=24):
-    now = datetime.now()
-    times = [(now - timedelta(hours=hours-i)).strftime("%H:%M") for i in range(hours)]
-    base_sales = np.random.normal(5.2, 1.5, hours)
-    base_orders = np.random.normal(220, 60, hours)
-    base_users = np.random.normal(180, 40, hours)
-    for i in range(hours):
-        h = (now.hour - hours + i) % 24
-        if 9 <= h <= 12 or 14 <= h <= 18 or 20 <= h <= 22:
-            base_sales[i] *= 1.5; base_orders[i] *= 1.4; base_users[i] *= 1.3
-        elif 0 <= h <= 6:
-            base_sales[i] *= 0.3; base_orders[i] *= 0.2; base_users[i] *= 0.4
     return pd.DataFrame({
-        "时间": times,
-        "销售额": np.round(np.maximum(base_sales, 0.5), 2),
-        "订单量": np.round(np.maximum(base_orders, 10)).astype(int),
-        "在线用户": np.round(np.maximum(base_users, 20)).astype(int),
+        "时间": [f"D{i}" for i in range(hours)],
+        "销售额": [0] * hours,
+        "订单量": [0] * hours,
+        "付款订单": [0] * hours,
     })
 
 
+# ========== 订单状态分布（替代原“渠道”）==========
 def generate_channel_data(date_str=None):
-    """获取渠道数据"""
-    if date_str is None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-    
-    if not df_channel.empty:
-        day_data = df_channel[df_channel["date"] == date_str]
-        if day_data.empty:
-            day_data = df_channel[df_channel["date"] == df_channel["date"].max()]
-        
-        if not day_data.empty:
-            return pd.DataFrame({
-                "渠道": day_data["channel"].tolist(),
-                "订单量": day_data["orders"].astype(int).tolist(),
-                "占比": day_data["share_pct"].tolist(),
-            })
-    
+    if ORDERS.empty:
+        return pd.DataFrame({"渠道": ["已付款", "未付款", "已退款"], "订单量": [0, 0, 0], "占比": [0, 0, 0]})
+    counts = ORDERS["status"].value_counts()
+    total = int(counts.sum())
+    rows = []
+    for name in ["已付款", "未付款", "已退款"]:
+        c = int(counts.get(name, 0))
+        rows.append({"渠道": name, "订单量": c, "占比": round(c / total * 100, 1) if total else 0})
+    return pd.DataFrame(rows)
+
+
+# ========== 省份销售 TOP10（替代原“热销商品”）==========
+def generate_top_products(date_str=None):
+    if ORDERS.empty:
+        return pd.DataFrame(columns=["商品名称", "销量", "销售额(万)", "环比(%)"])
+    g = ORDERS.groupby("province").agg(
+        gmv=("paid_amount", "sum"), orders=("order_id", "count")
+    ).reset_index().sort_values("gmv", ascending=False).head(10)
     return pd.DataFrame({
-        "渠道": ["小程序", "APP", "线下门店", "第三方平台"],
-        "订单量": [2156, 1420, 1087, 760],
-        "占比": [39.8, 26.2, 20.0, 14.0],
+        "商品名称": g["province"].tolist(),
+        "销量": g["orders"].astype(int).tolist(),
+        "销售额(万)": (g["gmv"] / 10000).round(2).tolist(),
+        "环比(%)": [0.0] * len(g),
     })
 
 
-def generate_top_products(date_str=None):
-    """获取热销商品"""
-    if date_str is None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-    
-    if not df_products.empty:
-        day_data = df_products[df_products["date"] == date_str]
-        if day_data.empty:
-            day_data = df_products[df_products["date"] == df_products["date"].max()]
-        
-        if not day_data.empty:
-            top = day_data.sort_values("sales_count", ascending=False).head(10)
-            return pd.DataFrame({
-                "商品名称": top["product"].tolist(),
-                "销量": top["sales_count"].astype(int).tolist(),
-                "销售额(万)": top["revenue_wan"].tolist(),
-                "环比(%)": [round(np.random.normal(2, 8), 1) for _ in range(len(top))],
-            })
-    
-    # 备用
-    products = [
-        ("无线蓝牙耳机 Pro", 892, 26.78, 12.5),
-        ("智能运动手环 X3", 756, 15.12, 8.3),
-        ("便携充电宝 20000mAh", 634, 12.68, -2.1),
-        ("机械键盘 RGB", 521, 10.42, 5.7),
-        ("护眼台灯 智能版", 487, 9.74, 15.2),
-        ("蓝牙音箱 Mini", 423, 8.46, -5.3),
-        ("手机支架 铝合金", 398, 3.98, 22.1),
-        ("Type-C 数据线套装", 356, 3.56, 1.8),
-        ("桌面收纳盒 多层", 312, 4.68, -8.4),
-        ("USB 扩展坞 7合1", 287, 8.61, 3.2),
-    ]
-    return pd.DataFrame(products, columns=["商品名称", "销量", "销售额(万)", "环比(%)"])
+# ========== 全国省份订单分布（地图）==========
+def generate_province_distribution():
+    if ORDERS.empty:
+        return pd.DataFrame(columns=["省份", "订单量", "销售额(万)"])
+    g = ORDERS.groupby("province").agg(
+        orders=("order_id", "count"), gmv=("paid_amount", "sum")
+    ).reset_index().sort_values("orders", ascending=False)
+    g = g.rename(columns={"province": "省份", "orders": "订单量"})
+    g["销售额(万)"] = (g["gmv"] / 10000).round(2)
+    return g[["省份", "订单量", "销售额(万)"]]
 
 
+# ========== 每日交易健康度趋势 ==========
+def generate_health_trend():
+    if DAILY.empty:
+        return pd.DataFrame()
+    return pd.DataFrame({
+        "时间": DAILY["date"].tolist(),
+        "付款率(%)": (DAILY["paid"] / DAILY["orders"] * 100).round(1).tolist(),
+        "退款率(%)": (DAILY["refunded"] / DAILY["orders"] * 100).round(1).tolist(),
+    })
+
+
+# ========== 告警（真实阈值）==========
 def generate_alert_data(date_str=None):
-    """生成告警数据（基于真实指标阈值判断）"""
-    kpi = generate_kpi_data(date_str)
+    if ORDERS.empty:
+        return pd.DataFrame(columns=["time", "type", "level", "value", "status"])
+    now = datetime.now().strftime("%H:%M:%S")
     alerts = []
-    
-    # 基于KPI判断告警
-    if kpi.get("users", {}).get("trend") == "down" and kpi["users"].get("change", 0) < -15:
+
+    refund_rate = ORDERS["is_refund"].mean() * 100
+    if refund_rate >= 18:
         alerts.append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "type": "在线用户大幅下跌",
-            "level": "高危",
-            "value": f"用户数较昨日下降{abs(kpi['users']['change'])}%",
+            "time": now, "type": "整体退款率预警", "level": "高危",
+            "value": f"全量订单退款率 {refund_rate:.1f}%",
             "status": "未处理",
         })
-    
-    if kpi.get("conversion", {}).get("change", 0) < -5:
+
+    g = ORDERS.groupby("province").agg(
+        orders=("order_id", "count"), refunded=("is_refund", "sum")
+    ).reset_index()
+    g["rr"] = g["refunded"] / g["orders"] * 100
+    for _, r in g.sort_values("rr", ascending=False).head(3).iterrows():
+        if r["rr"] >= 15:
+            alerts.append({
+                "time": now, "type": f"{r['province']} 退款率偏高", "level": "中危",
+                "value": f"退款率 {r['rr']:.1f}%（{int(r['refunded'])}/{int(r['orders'])} 单）",
+                "status": "未处理",
+            })
+
+    unpaid = (~ORDERS["is_paid"]).mean() * 100
+    if unpaid >= 12:
         alerts.append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "type": "转化率低于阈值",
-            "level": "中危",
-            "value": f"转化率降至{kpi['conversion']['value']}%，环比{kpi['conversion']['change']:+.1f}%",
-            "status": "未处理",
-        })
-    
-    if kpi.get("orders", {}).get("trend") == "down" and kpi["orders"].get("change", 0) < -10:
-        alerts.append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "type": "订单量异常下降",
-            "level": "中危",
-            "value": f"订单量较昨日下降{abs(kpi['orders']['change'])}%",
+            "time": now, "type": "未付款占比较高", "level": "低危",
+            "value": f"未付款订单占比 {unpaid:.1f}%",
             "status": "处理中",
         })
-    
-    # 库存预警
-    alerts.append({
-        "time": datetime.now().strftime("%H:%M:%S"),
-        "type": "库存不足预警",
-        "level": "低危",
-        "value": f"无线蓝牙耳机 Pro 库存 < 50",
-        "status": "已处理",
-    })
-    
-    # 确保有高中低危各至少一条
-    if not any(a["level"] == "高危" for a in alerts):
-        alerts.insert(0, {
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "type": "支付通道异常",
-            "level": "高危",
-            "value": "微信支付成功率降至78%",
-            "status": "未处理",
+
+    if not alerts:
+        pay_rate = ORDERS["is_paid"].mean() * 100
+        alerts.append({
+            "time": now, "type": "数据监控正常", "level": "低危",
+            "value": f"整体付款率 {pay_rate:.1f}%",
+            "status": "已处理",
         })
-    
-    return pd.DataFrame(alerts[:5])
+    return pd.DataFrame(alerts[:6])
 
 
+# ========== 订单流水（真实抽样）==========
 def generate_order_stream(n=8):
-    """获取准实时订单流"""
-    if not df_orders.empty:
-        recent = df_orders.head(n)
-        return pd.DataFrame({
-            "订单编号": recent["order_id"].tolist(),
-            "下单时间": recent["order_time"].tolist(),
-            "客户ID": [f"U{random.randint(10000, 99999)}" for _ in range(n)],
-            "消费金额": [f"¥{a}" for a in recent["amount_yuan"].tolist()],
-            "支付渠道": recent["channel"].tolist(),
-            "商品数量": [random.randint(1, 5) for _ in range(n)],
-            "订单状态": recent["status"].tolist(),
+    if ORDERS.empty:
+        return pd.DataFrame(columns=["订单编号", "下单时间", "消费金额", "订单状态"])
+    pool = ORDERS.sort_values("create_time", ascending=False).head(max(n * 3, 12))
+    sample = pool.sample(min(n, len(pool)), random_state=1)
+    out = []
+    for _, r in sample.iterrows():
+        out.append({
+            "订单编号": str(r["order_id"]),
+            "下单时间": r["create_time"].strftime("%H:%M:%S") if pd.notna(r["create_time"]) else "",
+            "消费金额": f"¥{r['paid_amount']:.2f}",
+            "订单状态": r["status"],
         })
-    
-    # 备用
-    channels = ["小程序", "APP", "线下门店", "第三方平台"]
-    statuses = ["已完成", "配送中", "待发货", "已取消"]
-    now = datetime.now()
-    orders = []
-    for i in range(n):
-        t = now - timedelta(minutes=i * 3 + random.randint(0, 2))
-        orders.append({
-            "订单编号": f"ORD{now.strftime('%Y%m%d')}{random.randint(100000, 999999)}",
-            "下单时间": t.strftime("%H:%M:%S"),
-            "客户ID": f"U{random.randint(10000, 99999)}",
-            "消费金额": f"¥{random.randint(50, 2000)}",
-            "支付渠道": random.choice(channels),
-            "商品数量": random.randint(1, 5),
-            "订单状态": random.choice(statuses),
-        })
-    return pd.DataFrame(orders)
+    return pd.DataFrame(out)
 
 
-# ========== 新增辅助函数 ==========
-
+# ========== 辅助 ==========
 def get_available_dates():
-    """返回数据中所有可用日期（用于时间筛选器）"""
-    if not df_kpi.empty:
-        dates = df_kpi["date"].unique().tolist()
-        dates.sort(reverse=True)
-        return dates
-    return [(datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(30)]
+    if DAILY.empty:
+        return []
+    return list(DAILY["date"])
+
+
+def _kpi_daily_series(kpi_name):
+    if DAILY.empty:
+        return pd.DataFrame()
+    if kpi_name == "sales":
+        vals = (DAILY["gmv"] / 10000).round(2)
+    elif kpi_name == "orders":
+        vals = DAILY["orders"].astype(int)
+    elif kpi_name == "avg_order":
+        vals = (DAILY["paid_amt"] / DAILY["paid"].replace(0, np.nan)).round(1)
+    elif kpi_name == "pay_rate":
+        vals = (DAILY["paid"] / DAILY["orders"] * 100).round(1)
+    elif kpi_name == "refund_rate":
+        vals = (DAILY["refunded"] / DAILY["orders"] * 100).round(1)
+    else:  # provinces
+        vals = DAILY["provinces"].astype(int)
+    return pd.DataFrame({"时间": DAILY["date"].tolist(), "值": vals.tolist()})
+
+
+def _kpi_by_province(kpi_name):
+    if ORDERS.empty:
+        return pd.DataFrame()
+    g = ORDERS.groupby("province").agg(
+        gmv=("paid_amount", "sum"),
+        orders=("order_id", "count"),
+        paid=("is_paid", "sum"),
+        refunded=("is_refund", "sum"),
+    ).reset_index()
+    if kpi_name == "sales":
+        vals = (g["gmv"] / 10000).round(2)
+    elif kpi_name == "orders":
+        vals = g["orders"].astype(int)
+    elif kpi_name == "avg_order":
+        vals = (g["gmv"] / g["paid"].replace(0, np.nan)).round(1)
+    elif kpi_name == "pay_rate":
+        vals = (g["paid"] / g["orders"] * 100).round(1)
+    elif kpi_name == "refund_rate":
+        vals = (g["refunded"] / g["orders"] * 100).round(1)
+    else:
+        vals = pd.Series([1] * len(g))
+    return pd.DataFrame({"维度": g["province"].tolist(), "值": vals.tolist()})
 
 
 def get_kpi_detail(kpi_name, date_str=None):
-    """获取KPI下钻明细"""
-    if date_str is None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-    
-    if df_hourly.empty:
-        return pd.DataFrame()
-    
-    day_data = df_hourly[df_hourly["date"] == date_str]
-    if day_data.empty:
-        day_data = df_hourly[df_hourly["date"] == df_hourly["date"].max()]
-    
-    if not day_data.empty:
-        day_data = day_data.sort_values("hour")
-        
-        field_map = {
-            "sales": "sales_yuan",
-            "orders": "orders",
-            "users": "users",
-        }
-        field = field_map.get(kpi_name, "sales_yuan")
-        
-        return pd.DataFrame({
-            "时间": [f"{int(h):02d}:00" for h in day_data["hour"]],
-            "值": day_data[field].tolist(),
-        })
-    
-    return pd.DataFrame()
+    return _kpi_daily_series(kpi_name)
 
 
 def get_kpi_detail_by_dimension(kpi_name, dimension, date_str=None):
-    """
-    按维度下钻获取 KPI 明细。
-    dimension 可选：时间、渠道、城市、商品分类
-    """
-    if date_str is None:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-
-    # 1. 时间维度：24 小时明细（各 KPI 按可用字段计算或近似）
+    """维度下钻：时间（每日序列）/ 省份 / 订单状态"""
     if dimension == "时间":
-        if df_hourly.empty:
+        return _kpi_daily_series(kpi_name)
+    if dimension == "省份":
+        return _kpi_by_province(kpi_name)
+    if dimension == "订单状态":
+        if ORDERS.empty:
             return pd.DataFrame()
-        day_data = df_hourly[df_hourly["date"] == date_str]
-        if day_data.empty:
-            day_data = df_hourly[df_hourly["date"] == df_hourly["date"].max()]
-        if day_data.empty:
-            return pd.DataFrame()
-
-        day_data = day_data.sort_values("hour")
-        hours = [f"{int(h):02d}:00" for h in day_data["hour"]]
-
-        if kpi_name == "sales":
-            values = day_data["sales_yuan"].tolist()
-        elif kpi_name == "orders":
-            values = day_data["orders"].astype(int).tolist()
-        elif kpi_name == "users":
-            values = day_data["users"].astype(int).tolist()
-        elif kpi_name == "conversion":
-            # 近似转化率 = 订单量 / 在线用户 * 100，上限 100
-            values = ((day_data["orders"] / day_data["users"].replace(0, 1)) * 100).clip(upper=100).round(1).tolist()
-        elif kpi_name == "avg_order":
-            # 近似客单价 = 销售额 / 订单量
-            values = (day_data["sales_yuan"] / day_data["orders"].replace(0, 1)).round(1).tolist()
-        else:  # repeat
-            # 近似复购用户 = 在线用户 * 20%
-            values = (day_data["users"] * 0.2).astype(int).tolist()
-
-        return pd.DataFrame({"时间": hours, "值": values})
-
-    # 2. 渠道维度
-    if dimension == "渠道":
-        if df_channel.empty:
-            return pd.DataFrame()
-        day_data = df_channel[df_channel["date"] == date_str]
-        if day_data.empty:
-            day_data = df_channel[df_channel["date"] == df_channel["date"].max()]
-        if day_data.empty:
-            return pd.DataFrame()
-
-        day_data = day_data.sort_values("orders", ascending=False)
-        if kpi_name in ("sales", "orders"):
-            return pd.DataFrame({
-                "维度": day_data["channel"].tolist(),
-                "值": day_data["orders"].astype(int).tolist(),
-            })
-        elif kpi_name == "users":
-            # 用户数按渠道占比近似拆分
-            total_users = generate_kpi_data(date_str).get("users", {}).get("value", 1000)
-            return pd.DataFrame({
-                "维度": day_data["channel"].tolist(),
-                "值": (day_data["share_pct"] / 100 * total_users).astype(int).tolist(),
-            })
-        elif kpi_name == "conversion":
-            # 转化率按渠道统一基线加随机扰动
-            base = generate_kpi_data(date_str).get("conversion", {}).get("value", 30.0)
-            return pd.DataFrame({
-                "维度": day_data["channel"].tolist(),
-                "值": [round(base + random.uniform(-5, 5), 1) for _ in range(len(day_data))],
-            })
-        elif kpi_name == "avg_order":
-            base = generate_kpi_data(date_str).get("avg_order", {}).get("value", 200.0)
-            return pd.DataFrame({
-                "维度": day_data["channel"].tolist(),
-                "值": [round(base + random.uniform(-30, 40), 1) for _ in range(len(day_data))],
-            })
-        else:  # repeat
-            return pd.DataFrame({
-                "维度": day_data["channel"].tolist(),
-                "值": (day_data["share_pct"] / 100 * 300).astype(int).tolist(),
-            })
-
-    # 3. 城市维度（基于订单流水）
-    if dimension == "城市":
-        if df_orders.empty:
-            return pd.DataFrame()
-        # 只取当天订单；CSV 没有日期字段，这里用所有数据演示
-        city_group = df_orders.groupby("user_city").agg({
-            "amount_yuan": "sum",
-            "order_id": "count",
-        }).reset_index()
-        city_group.columns = ["user_city", "amount", "orders"]
-        city_group = city_group.sort_values("amount", ascending=False).head(15)
-
-        if kpi_name == "sales":
-            return pd.DataFrame({
-                "维度": city_group["user_city"].tolist(),
-                "值": city_group["amount"].round(2).tolist(),
-            })
-        elif kpi_name == "orders":
-            return pd.DataFrame({
-                "维度": city_group["user_city"].tolist(),
-                "值": city_group["orders"].astype(int).tolist(),
-            })
-        elif kpi_name == "users":
-            # 按订单量近似估算用户数
-            return pd.DataFrame({
-                "维度": city_group["user_city"].tolist(),
-                "值": (city_group["orders"] * 0.7).astype(int).tolist(),
-            })
-        elif kpi_name == "conversion":
-            base = generate_kpi_data(date_str).get("conversion", {}).get("value", 30.0)
-            return pd.DataFrame({
-                "维度": city_group["user_city"].tolist(),
-                "值": [round(base + random.uniform(-6, 6), 1) for _ in range(len(city_group))],
-            })
-        elif kpi_name == "avg_order":
-            return pd.DataFrame({
-                "维度": city_group["user_city"].tolist(),
-                "值": (city_group["amount"] / city_group["orders"].replace(0, 1)).round(1).tolist(),
-            })
-        else:  # repeat
-            return pd.DataFrame({
-                "维度": city_group["user_city"].tolist(),
-                "值": (city_group["orders"] * 0.15).astype(int).tolist(),
-            })
-
-    # 4. 商品分类维度（仅销售额、订单量、客单价较合理）
-    if dimension == "商品分类":
-        if df_products.empty:
-            return pd.DataFrame()
-        day_data = df_products[df_products["date"] == date_str]
-        if day_data.empty:
-            day_data = df_products[df_products["date"] == df_products["date"].max()]
-        if day_data.empty:
-            return pd.DataFrame()
-
-        cat_group = day_data.groupby("category").agg({
-            "revenue_wan": "sum",
-            "sales_count": "sum",
-            "price_yuan": "mean",
-        }).reset_index()
-        cat_group.columns = ["category", "revenue", "sales_count", "avg_price"]
-        cat_group = cat_group.sort_values("revenue", ascending=False)
-
-        if kpi_name == "sales":
-            return pd.DataFrame({
-                "维度": cat_group["category"].tolist(),
-                "值": cat_group["revenue"].round(2).tolist(),
-            })
-        elif kpi_name == "orders":
-            return pd.DataFrame({
-                "维度": cat_group["category"].tolist(),
-                "值": cat_group["sales_count"].astype(int).tolist(),
-            })
-        elif kpi_name == "avg_order":
-            return pd.DataFrame({
-                "维度": cat_group["category"].tolist(),
-                "值": cat_group["avg_price"].round(1).tolist(),
-            })
-        else:
-            # 其他指标用销售额占比近似
-            return pd.DataFrame({
-                "维度": cat_group["category"].tolist(),
-                "值": cat_group["revenue"].round(2).tolist(),
-            })
-
+        counts = ORDERS["status"].value_counts()
+        return pd.DataFrame({"维度": counts.index.tolist(), "值": counts.values.astype(int).tolist()})
     return pd.DataFrame()

@@ -9,6 +9,7 @@ import plotly.express as px
 from utils.data_generator import (
     generate_kpi_data, generate_trend_data, generate_channel_data,
     generate_top_products, generate_alert_data, generate_order_stream,
+    generate_province_distribution,
     get_kpi_detail, get_kpi_detail_by_dimension
 )
 from utils.navbar import render_navbar, render_sidebar, resolve_query_date
@@ -31,12 +32,12 @@ query_date, compare_date = resolve_query_date(selected_period)
 # ========== KPI 卡片（可点击下钻）==========
 kpi_data = generate_kpi_data(query_date, compare_date)
 kpi_items = [
-    ("准实时销售额", kpi_data["sales"]["value"], kpi_data["sales"]["unit"], kpi_data["sales"]["change"], kpi_data["sales"]["trend"], "#3b82f6", "sales"),
-    ("准实时订单量", kpi_data["orders"]["value"], kpi_data["orders"]["unit"], kpi_data["orders"]["change"], kpi_data["orders"]["trend"], "#8b5cf6", "orders"),
-    ("在线用户数", kpi_data["users"]["value"], kpi_data["users"]["unit"], kpi_data["users"]["change"], kpi_data["users"]["trend"], "#ec4899", "users"),
-    ("整体转化率", kpi_data["conversion"]["value"], kpi_data["conversion"]["unit"], kpi_data["conversion"]["change"], kpi_data["conversion"]["trend"], "#10b981", "conversion"),
+    ("销售额(日)", kpi_data["sales"]["value"], kpi_data["sales"]["unit"], kpi_data["sales"]["change"], kpi_data["sales"]["trend"], "#3b82f6", "sales"),
+    ("订单量(日)", kpi_data["orders"]["value"], kpi_data["orders"]["unit"], kpi_data["orders"]["change"], kpi_data["orders"]["trend"], "#8b5cf6", "orders"),
     ("客单价", kpi_data["avg_order"]["value"], kpi_data["avg_order"]["unit"], kpi_data["avg_order"]["change"], kpi_data["avg_order"]["trend"], "#f59e0b", "avg_order"),
-    ("复购用户", kpi_data["repeat"]["value"], kpi_data["repeat"]["unit"], kpi_data["repeat"]["change"], kpi_data["repeat"]["trend"], "#06b6d4", "repeat"),
+    ("付款率", kpi_data["pay_rate"]["value"], kpi_data["pay_rate"]["unit"], kpi_data["pay_rate"]["change"], kpi_data["pay_rate"]["trend"], "#10b981", "pay_rate"),
+    ("退款率", kpi_data["refund_rate"]["value"], kpi_data["refund_rate"]["unit"], kpi_data["refund_rate"]["change"], kpi_data["refund_rate"]["trend"], "#ef4444", "refund_rate"),
+    ("覆盖省份", kpi_data["provinces"]["value"], kpi_data["provinces"]["unit"], kpi_data["provinces"]["change"], kpi_data["provinces"]["trend"], "#06b6d4", "provinces"),
 ]
 
 with st.container(border=True):
@@ -82,21 +83,21 @@ if st.session_state.selected_kpi:
     kpi_name_map = {
         "sales": "销售额",
         "orders": "订单量",
-        "users": "在线用户",
-        "conversion": "转化率",
         "avg_order": "客单价",
-        "repeat": "复购用户",
+        "pay_rate": "付款率",
+        "refund_rate": "退款率",
+        "provinces": "覆盖省份",
     }
     drill_name = kpi_name_map.get(st.session_state.selected_kpi, st.session_state.selected_kpi)
 
     # 不同 KPI 支持的下钻维度
     dimension_options = {
-        "sales": ["时间", "渠道", "城市", "商品分类"],
-        "orders": ["时间", "渠道", "城市"],
-        "users": ["时间", "城市"],
-        "conversion": ["时间", "渠道", "城市"],
-        "avg_order": ["时间", "渠道", "城市", "商品分类"],
-        "repeat": ["时间", "城市"],
+        "sales": ["时间", "省份", "订单状态"],
+        "orders": ["时间", "省份"],
+        "avg_order": ["时间", "省份"],
+        "pay_rate": ["时间", "省份"],
+        "refund_rate": ["时间", "省份"],
+        "provinces": ["时间"],
     }
     available_dims = dimension_options.get(st.session_state.selected_kpi, ["时间"])
     dim_key = f"drill_dim_{st.session_state.selected_kpi}"
@@ -165,9 +166,9 @@ with st.container(border=True):
     trend_df = generate_trend_data(24, query_date)
     col1, col2, col3 = st.columns(3)
     chart_configs = [
-        (col1, "销售额分时趋势", "销售额", "#3b82f6", "rgba(59,130,246,0.15)"),
-        (col2, "订单量分时趋势", "订单量", "#8b5cf6", "rgba(139,92,246,0.15)"),
-        (col3, "在线用户分时趋势", "在线用户", "#ec4899", "rgba(236,72,153,0.15)"),
+        (col1, "销售额每日趋势", "销售额", "#3b82f6", "rgba(59,130,246,0.15)"),
+        (col2, "订单量每日趋势", "订单量", "#8b5cf6", "rgba(139,92,246,0.15)"),
+        (col3, "付款订单每日趋势", "付款订单", "#ec4899", "rgba(236,72,153,0.15)"),
     ]
     for i, (col, title, col_name, color, fill_color) in enumerate(chart_configs):
         with col:
@@ -194,16 +195,16 @@ with st.container(border=True):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>全国用户分布热力图</p>", unsafe_allow_html=True)
-        map_provinces = ["广东", "浙江", "江苏", "北京", "上海", "四川", "山东", "福建", "湖北", "河南"]
-        map_values = [2850, 1920, 1780, 1540, 1460, 1120, 1080, 950, 870, 820]
-        map_colors = ["#1e3a5f", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe", "#eff6ff"]
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>全国订单分布热力图</p>", unsafe_allow_html=True)
+        prov_df = generate_province_distribution().head(15)
+        prov_colors = ["#1e3a5f", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe", "#eff6ff"]
+        prov_color_list = [prov_colors[min(i, len(prov_colors) - 1)] for i in range(len(prov_df))]
         fig_map = go.Figure()
         fig_map.add_trace(go.Bar(
-            y=list(reversed(map_provinces)), x=list(reversed(map_values)), orientation="h",
-            marker=dict(color=list(reversed(map_colors)), line=dict(color="#1e293b", width=1)),
-            text=[f"{v}" for v in reversed(map_values)], textposition="outside", textfont=dict(color="#cbd5e1", size=11),
-            hovertemplate="<b>%{y}</b><br>活跃用户: %{x}<extra></extra>",
+            y=list(reversed(prov_df["省份"].tolist())), x=list(reversed(prov_df["订单量"].tolist())), orientation="h",
+            marker=dict(color=list(reversed(prov_color_list)), line=dict(color="#1e293b", width=1)),
+            text=[f"{v:,}" for v in reversed(prov_df["订单量"].tolist())], textposition="outside", textfont=dict(color="#cbd5e1", size=11),
+            hovertemplate="<b>%{y}</b><br>订单量: %{x}<extra></extra>",
         ))
         fig_map.update_layout(
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -214,7 +215,7 @@ with st.container(border=True):
         st.plotly_chart(fig_map, use_container_width=True, key="map_chart_main")
 
     with col2:
-        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>渠道订单占比</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>订单状态占比</p>", unsafe_allow_html=True)
         channel_df = generate_channel_data(query_date)
         fig_channel = go.Figure(data=[go.Pie(
             labels=channel_df["渠道"], values=channel_df["订单量"], hole=0.6,
@@ -233,7 +234,7 @@ with st.container(border=True):
         st.plotly_chart(fig_channel, use_container_width=True, key="channel_chart_main")
 
     with col3:
-        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>热销商品 TOP10</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:8px;'>省份销售 TOP10</p>", unsafe_allow_html=True)
         top_df = generate_top_products(query_date)
         colors_top = ["#f59e0b" if i == 0 else "#3b82f6" for i in range(len(top_df))]
         fig_top = go.Figure()
@@ -310,7 +311,7 @@ with st.container(border=True):
             st.html(alert_item_html)
 
     with col_right:
-        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:10px;'>准实时订单流水</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#cbd5e1; font-size:13px; font-weight:600; margin-bottom:10px;'>订单流水</p>", unsafe_allow_html=True)
         order_df = generate_order_stream(8)
 
         table_html = """
@@ -348,7 +349,7 @@ with st.container(border=True):
 # ========== 底部信息 ==========
 st.markdown(f"""
 <div style="text-align:center; padding:12px; color:#cbd5e1; font-size:11px; border-top:1px solid rgba(100,180,255,0.1); margin-top:12px;">
-    数据来源: 91天业务数据 | 系统时间: {current_time} | 数据日期: {query_date}
+    数据来源: 天猫订单成交数据（天池公开数据集 28010 单） | 数据日期: {query_date}
 </div>
 """, unsafe_allow_html=True)
 

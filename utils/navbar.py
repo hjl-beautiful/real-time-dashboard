@@ -312,7 +312,7 @@ def render_navbar(current_page: str = "监控总览"):
         <div style="display:flex; align-items:center; gap:16px;">
             <div class="live-indicator">
                 <div class="live-dot"></div>
-                <span>准实时数据</span>
+                <span>交易数据分析</span>
             </div>
             <div class="top-header-nav">
                 {nav_html}
@@ -405,7 +405,7 @@ def render_sidebar():
         # 数据源信息
         st.markdown("""
         <div style="font-size:11px; color:#cbd5e1; text-align:center; margin-top:20px;">
-            <div>数据来源: 91天自洽业务数据</div>
+            <div>数据来源: 天猫订单成交数据（天池公开数据集）</div>
             <div>后端: Flask RESTful API</div>
             <div style="margin-top:8px; color:#e2e8f0;">2026 企业数据监控大屏</div>
         </div>
@@ -419,6 +419,6 @@ def render_live_badge():
     st.markdown("""
     <div class="live-indicator" style="margin-bottom:12px;">
         <div class="live-dot"></div>
-        <span>准实时数据流</span>
+        <span>数据分析视图</span>
     </div>
     """, unsafe_allow_html=True)

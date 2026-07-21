@@ -11,7 +11,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.data_generator import (
     generate_trend_data, generate_channel_data, generate_top_products,
-    generate_kpi_data, generate_order_stream
+    generate_kpi_data, generate_order_stream, generate_province_distribution
 )
 from utils.navbar import render_navbar, render_sidebar, resolve_query_date
 
@@ -31,14 +31,14 @@ kpi = generate_kpi_data(query_date)
 kpi_items = [
     ("销售额", kpi["sales"]["value"], kpi["sales"]["unit"], kpi["sales"]["change"], kpi["sales"]["trend"]),
     ("订单量", kpi["orders"]["value"], kpi["orders"]["unit"], kpi["orders"]["change"], kpi["orders"]["trend"]),
-    ("在线用户", kpi["users"]["value"], kpi["users"]["unit"], kpi["users"]["change"], kpi["users"]["trend"]),
-    ("转化率", kpi["conversion"]["value"], kpi["conversion"]["unit"], kpi["conversion"]["change"], kpi["conversion"]["trend"]),
     ("客单价", kpi["avg_order"]["value"], kpi["avg_order"]["unit"], kpi["avg_order"]["change"], kpi["avg_order"]["trend"]),
-    ("复购用户", kpi["repeat"]["value"], kpi["repeat"]["unit"], kpi["repeat"]["change"], kpi["repeat"]["trend"]),
+    ("付款率", kpi["pay_rate"]["value"], kpi["pay_rate"]["unit"], kpi["pay_rate"]["change"], kpi["pay_rate"]["trend"]),
+    ("退款率", kpi["refund_rate"]["value"], kpi["refund_rate"]["unit"], kpi["refund_rate"]["change"], kpi["refund_rate"]["trend"]),
+    ("覆盖省份", kpi["provinces"]["value"], kpi["provinces"]["unit"], kpi["provinces"]["change"], kpi["provinces"]["trend"]),
 ]
 
 with st.container(border=True):
-    st.markdown('<div class="panel-header">准实时经营概览</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header">经营概览</div>', unsafe_allow_html=True)
     kpi_cols = st.columns(6)
     for col, (name, val, unit, change, trend) in zip(kpi_cols, kpi_items):
         with col:
@@ -61,12 +61,12 @@ with st.container(border=True):
 
         trend_df = generate_trend_data(24, query_date)
 
-        tab1, tab2, tab3 = st.tabs(["销售额", "订单量", "在线用户"])
+        tab1, tab2, tab3 = st.tabs(["销售额", "订单量", "付款订单"])
 
         chart_configs = [
             ("销售额", "#3b82f6", "rgba(59,130,246,0.15)", "万"),
             ("订单量", "#8b5cf6", "rgba(139,92,246,0.15)", "单"),
-            ("在线用户", "#ec4899", "rgba(236,72,153,0.15)", "人"),
+            ("付款订单", "#ec4899", "rgba(236,72,153,0.15)", "单"),
         ]
 
         for tab, (col_name, color, fill_color, unit) in zip([tab1, tab2, tab3], chart_configs):
@@ -89,7 +89,7 @@ with st.container(border=True):
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     with col_right:
-        st.markdown('<div class="panel-header">渠道占比</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-header">订单状态占比</div>', unsafe_allow_html=True)
 
         ch_df = generate_channel_data(query_date)
         fig_ch = go.Figure(data=[go.Pie(
@@ -115,14 +115,14 @@ with st.container(border=True):
             </div>
             """, unsafe_allow_html=True)
 
-# ========== 第二行：热销商品 + 用户分布 + 订单流 ==========
+# ========== 第二行：省份销售 TOP + 省份分布 + 订单流 ==========
 with st.container(border=True):
     st.markdown('<div class="panel-header">商品与用户洞察</div>', unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([2, 1, 1])
 
     with c1:
-        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">热销商品 TOP10</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">省份销售 TOP10</div>', unsafe_allow_html=True)
 
         top_df = generate_top_products(query_date)
 
@@ -147,19 +147,19 @@ with st.container(border=True):
         st.plotly_chart(fig_top, use_container_width=True, config={"displayModeBar": False})
 
     with c2:
-        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">用户地域分布</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">全国订单分布</div>', unsafe_allow_html=True)
 
-        provinces = ["广东", "浙江", "江苏", "北京", "上海", "四川", "山东", "福建", "湖北", "河南"]
-        values = [2850, 1920, 1780, 1540, 1460, 1120, 1080, 950, 870, 820]
+        prov_df = generate_province_distribution().head(15)
         colors_map = ["#1e3a5f", "#1e40af", "#1d4ed8", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe", "#dbeafe", "#eff6ff"]
+        color_list = [colors_map[min(i, len(colors_map) - 1)] for i in range(len(prov_df))]
 
         fig_map = go.Figure()
         fig_map.add_trace(go.Bar(
-            y=list(reversed(provinces)), x=list(reversed(values)), orientation="h",
-            marker=dict(color=list(reversed(colors_map)), line=dict(color="#1e293b", width=0.5)),
-            text=[f"{v}" for v in reversed(values)], textposition="outside",
+            y=list(reversed(prov_df["省份"].tolist())), x=list(reversed(prov_df["订单量"].tolist())), orientation="h",
+            marker=dict(color=list(reversed(color_list)), line=dict(color="#1e293b", width=0.5)),
+            text=[f"{v:,}" for v in reversed(prov_df["订单量"].tolist())], textposition="outside",
             textfont=dict(color="#cbd5e1", size=10),
-            hovertemplate="<b>%{y}</b><br>活跃用户: %{x}<extra></extra>",
+            hovertemplate="<b>%{y}</b><br>订单量: %{x}<extra></extra>",
         ))
         fig_map.update_layout(
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -171,7 +171,7 @@ with st.container(border=True):
         st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
     with c3:
-        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">准实时订单流水</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:13px; color:#cbd5e1; margin-bottom:8px;">订单流水</div>', unsafe_allow_html=True)
 
         order_df = generate_order_stream(12)
 
@@ -208,7 +208,7 @@ with st.container(border=True):
 # 底部
 st.markdown(f"""
 <div style="text-align:center; padding:12px; color:#cbd5e1; font-size:11px; border-top:1px solid rgba(100,180,255,0.1); margin-top:12px;">
-    企业数据监控大屏 · 数据日期: {query_date} · 刷新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+    企业数据监控大屏 · 数据来源: 天猫订单成交数据（天池公开数据集） · 数据日期: {query_date} · 刷新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 </div>
 """, unsafe_allow_html=True)
 

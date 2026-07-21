@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.data_generator import generate_alert_data
+from utils.data_generator import generate_alert_data, generate_health_trend
 from utils.navbar import render_navbar, render_sidebar, resolve_query_date
 
 # ========== 统一导航栏 ==========
@@ -67,39 +67,36 @@ with st.container(border=True):
         </div>
         """, unsafe_allow_html=True)
 
-# ========== 告警趋势模拟 ==========
+# ========== 每日交易健康度趋势（真实）==========
 with st.container(border=True):
-    st.markdown('<div class="panel-header">近24小时告警趋势</div>', unsafe_allow_html=True)
+    st.markdown('<div class="panel-header">每日交易健康度趋势（付款率 / 退款率）</div>', unsafe_allow_html=True)
 
-    hours = [(datetime.now() - timedelta(hours=h)).strftime("%H:00") for h in range(23, -1, -1)]
-    high_trend = [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1]
-    mid_trend  = [1,0,1,0,0,1,0,1,0,0,0,0,1,1,0,0,1,0,1,0,0,1,1,2]
-    low_trend  = [0,1,1,0,0,1,0,0,1,2,0,0,1,0,1,1,0,0,0,1,0,0,1,2]
-
-    fig_trend = go.Figure()
-    fig_trend.add_trace(go.Bar(
-        x=hours, y=high_trend, name="高危", marker_color="#ef4444",
-        hovertemplate="<b>%{x}</b><br>高危: %{y}条<extra></extra>"
-    ))
-    fig_trend.add_trace(go.Bar(
-        x=hours, y=mid_trend, name="中危", marker_color="#f59e0b",
-        hovertemplate="<b>%{x}</b><br>中危: %{y}条<extra></extra>"
-    ))
-    fig_trend.add_trace(go.Bar(
-        x=hours, y=low_trend, name="低危", marker_color="#3b82f6",
-        hovertemplate="<b>%{x}</b><br>低危: %{y}条<extra></extra>"
-    ))
-    fig_trend.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        barmode="stack", font=dict(color="#cbd5e1"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                     font=dict(color="#cbd5e1", size=11)),
-        margin=dict(l=20, r=20, t=10, b=20), height=220,
-        xaxis=dict(showgrid=False, tickfont=dict(color="#cbd5e1", size=10), tickangle=45, nticks=12),
-        yaxis=dict(showgrid=True, gridcolor="rgba(51,65,85,0.5)", tickfont=dict(color="#cbd5e1"),
-                   title="告警数量", title_font_color="#cbd5e1"),
-    )
-    st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
+    hdf = generate_health_trend()
+    if not hdf.empty:
+        fig_trend = go.Figure()
+        fig_trend.add_trace(go.Scatter(
+            x=hdf["时间"], y=hdf["付款率(%)"], name="付款率", mode="lines+markers",
+            line=dict(color="#10b981", width=2.5),
+            hovertemplate="<b>%{x}</b><br>付款率: %{y}%<extra></extra>",
+        ))
+        fig_trend.add_trace(go.Scatter(
+            x=hdf["时间"], y=hdf["退款率(%)"], name="退款率", mode="lines+markers",
+            line=dict(color="#ef4444", width=2.5),
+            hovertemplate="<b>%{x}</b><br>退款率: %{y}%<extra></extra>",
+        ))
+        fig_trend.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#cbd5e1"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                         font=dict(color="#cbd5e1", size=11)),
+            margin=dict(l=20, r=20, t=10, b=20), height=220,
+            xaxis=dict(showgrid=False, tickfont=dict(color="#cbd5e1", size=10), tickangle=45, nticks=12),
+            yaxis=dict(showgrid=True, gridcolor="rgba(51,65,85,0.5)", tickfont=dict(color="#cbd5e1"),
+                       title="比率(%)", title_font_color="#cbd5e1"),
+        )
+        st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("暂无数据")
 
 # ========== 告警列表 ==========
 with st.container(border=True):

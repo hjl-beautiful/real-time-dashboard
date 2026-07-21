@@ -36,15 +36,15 @@ api_endpoints = [
         "method": "GET",
         "path": "/api/kpi",
         "params": [("period", "string", "today / week / month", "统计周期，默认 today")],
-        "desc": "获取核心经营指标（销售额、订单量、用户、转化率、客单价、复购）及环比变化",
+        "desc": "获取核心经营指标（销售额、订单量、客单价、付款率、退款率、覆盖省份）及环比变化",
         "example": f"curl \"{BASE_URL}/api/kpi?period=today\"",
         "response": """{
-  "sales":   {"value": 128.5, "unit": "万", "change": 23.1, "trend": "up"},
-  "orders":  {"value": 5423,  "unit": "单", "change": 14.9, "trend": "up"},
-  "users":   {"value": 1742,  "unit": "人", "change": -4.5, "trend": "down"},
-  "conversion": {"value": 31.8, "unit": "%", "change": 0.0, "trend": "flat"},
-  "avg_order": {"value": 236.8, "unit": "元", "change": 5.2, "trend": "up"},
-  "repeat":  {"value": 328,   "unit": "人", "change": -2.1, "trend": "down"}
+  "sales":   {"value": 15.8, "unit": "万", "change": -17.8, "trend": "down"},
+  "orders":  {"value": 2112, "unit": "单", "change": -21.5, "trend": "down"},
+  "avg_order": {"value": 86.9, "unit": "元", "change": 6.7, "trend": "up"},
+  "pay_rate": {"value": 86.0, "unit": "%", "change": -1.7, "trend": "down"},
+  "refund_rate": {"value": 18.2, "unit": "%", "change": -8.5, "trend": "down"},
+  "provinces": {"value": 30, "unit": "个", "change": 0.0, "trend": "flat"}
 }"""
     },
     {
@@ -52,11 +52,11 @@ api_endpoints = [
         "method": "GET",
         "path": "/api/trend",
         "params": [("date", "string", "YYYY-MM-DD", "查询日期，默认今天")],
-        "desc": "获取指定日期 24 小时销售额 / 订单量 / 在线用户趋势",
+        "desc": "获取每日销售额 / 订单量 / 付款订单趋势",
         "example": f"curl \"{BASE_URL}/api/trend?date=2026-07-15\"",
         "response": """[
-  {"hour": "00:00", "sales": 1820.5, "orders": 76, "users": 120},
-  {"hour": "12:00", "sales": 5620.0, "orders": 210, "users": 340}
+  {"date": "2020-02-01", "sales": 0.70, "orders": 176, "paid": 163},
+  {"date": "2020-02-02", "sales": 0.85, "orders": 222, "paid": 199}
 ]"""
     },
     {
@@ -64,37 +64,38 @@ api_endpoints = [
         "method": "GET",
         "path": "/api/channel",
         "params": [("date", "string", "YYYY-MM-DD", "查询日期，默认今天")],
-        "desc": "获取各销售渠道订单量及占比（小程序 / APP / 线下门店 / 第三方平台）",
+        "desc": "获取订单状态分布（已付款 / 未付款 / 已退款）及占比",
         "example": f"curl \"{BASE_URL}/api/channel?date=2026-07-15\"",
         "response": """[
-  {"channel": "小程序", "orders": 2156, "share": 39.8},
-  {"channel": "APP", "orders": 1420, "share": 26.2}
+  {"channel": "已付款", "orders": 18441, "share": 65.8},
+  {"channel": "未付款", "orders": 3923, "share": 14.0},
+  {"channel": "已退款", "orders": 5646, "share": 20.2}
 ]"""
     },
     {
-        "name": "热销商品",
+        "name": "省份销售",
         "method": "GET",
         "path": "/api/top_products",
         "params": [("date", "string", "YYYY-MM-DD", "查询日期，默认今天")],
-        "desc": "获取指定日期销量 Top10 商品（含销量与销售额）",
+        "desc": "获取省份销售 Top10（含订单量与销售额）",
         "example": f"curl \"{BASE_URL}/api/top_products?date=2026-07-15\"",
         "response": """[
-  {"product": "无线蓝牙耳机 Pro", "sales_count": 892, "revenue": 26.78, "category": "数码配件"},
-  {"product": "智能运动手环 X3", "sales_count": 756, "revenue": 15.12, "category": "智能穿戴"}
+  {"province": "上海", "orders": 3353, "revenue_wan": 26.40},
+  {"province": "北京", "orders": 2054, "revenue_wan": 16.64}
 ]"""
     },
     {
-        "name": "准实时订单流",
+        "name": "订单流水",
         "method": "GET",
         "path": "/api/orders_stream",
         "params": [("limit", "int", "1-100", "返回条数，默认 20")],
-        "desc": "获取最新订单流水（订单号、时间、金额、渠道、状态、城市）",
+        "desc": "获取最新订单流水（订单号、时间、金额、状态）",
         "example": f"curl \"{BASE_URL}/api/orders_stream?limit=10\"",
         "response": """[
-  {"order_id": "ORD20260715123456", "time": "14:32:08",
-   "amount": 299.0, "channel": "小程序", "status": "已完成", "city": "广州"},
-  {"order_id": "ORD20260715123457", "time": "14:30:55",
-   "amount": 159.0, "channel": "APP", "status": "配送中", "city": "杭州"}
+  {"order_id": "20624", "time": "23:54:32",
+   "amount": 160.00, "status": "已付款"},
+  {"order_id": "20625", "time": "23:54:23",
+   "amount": 114.00, "status": "已付款"}
 ]"""
     },
 ]
@@ -136,7 +137,7 @@ with st.container(border=True):
     st.markdown("""
     <div style="font-size:12px; color:#cbd5e1; line-height:1.8;">
         <strong style="color:#3b82f6;">后端框架</strong>：Flask 3.x + Flask-CORS<br>
-        <strong style="color:#8b5cf6;">数据层</strong>：CSV → SQLite 自动建表导入（91 天自洽业务数据）<br>
+        <strong style="color:#8b5cf6;">数据层</strong>：真实天猫订单成交数据（天池公开数据集，28,010 单）经 Pandas 计算指标<br>
         <strong style="color:#10b981;">前端</strong>：Streamlit 读取同一份数据，前后端分离<br>
         <strong style="color:#f59e0b;">部署方式</strong>：本地开发直接运行 backend/app.py；生产环境建议 Gunicorn 或 Docker<br>
         <strong style="color:#06b6d4;">跨域支持</strong>：默认开启 CORS，第三方系统可直接调用
